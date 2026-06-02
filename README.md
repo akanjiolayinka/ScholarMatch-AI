@@ -1,1 +1,1 @@
-# RAG-CHATBOT
+# ScholarMatch AI
