@@ -8,6 +8,7 @@ import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import ApplicationAssistant from './pages/ApplicationAssistant'
 import Tracker from './pages/Tracker'
+import Profile from './pages/Profile'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/apply/:id" element={<ApplicationAssistant />} />
         <Route path="/tracker" element={<Tracker />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
