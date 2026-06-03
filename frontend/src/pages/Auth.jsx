@@ -1,11 +1,20 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { useSession } from '../lib/useSession'
 import Logo from '../components/Logo'
 import './Auth.css'
 
 export default function Auth() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { session, loading: sessionLoading } = useSession()
+  const redirectTo = location.state?.from || '/dashboard'
+
+  useEffect(() => {
+    if (!sessionLoading && session) navigate(redirectTo, { replace: true })
+  }, [sessionLoading, session, navigate, redirectTo])
+
   const [mode, setMode] = useState('signup') // 'signup' | 'login'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -66,7 +75,7 @@ export default function Auth() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        navigate('/onboarding')
+        navigate(redirectTo)
       }
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
