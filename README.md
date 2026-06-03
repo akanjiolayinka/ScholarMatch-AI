@@ -5,7 +5,8 @@ AI-powered scholarship matching for African students.
 ## Structure
 
 - `frontend/` — Vite + React app (UI, Supabase auth client)
-- `backend/` — Express API + Prisma (matching, AI drafts, user sync)
+- `backend/` — Express API (matching, AI drafts, user sync) — uses Supabase JS client only
+- `supabase/schema.sql` — run this in the Supabase SQL editor to create tables, RLS, and storage policies
 
 ## Quick start
 
@@ -21,7 +22,7 @@ npm run dev:backend
 
 - React 18 + Vite + React Router
 - Supabase Auth (Google OAuth + email)
-- Express + Prisma + PostgreSQL
+- Express + Supabase JS client (Postgres, Auth, Storage)
 - Anthropic Claude for AI drafting
 
 ## Design tokens
