@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import Logo from '../components/Logo'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { useSession } from '../lib/useSession'
+import { upsertProfile, setUserName, parseStudies, parseGpa } from '../lib/profileApi'
 import './Onboarding.css'
 
 const STEPS = [
@@ -105,8 +107,38 @@ function aiText(q, profile) {
   return typeof q.ai === 'function' ? q.ai(profile) : q.ai
 }
 
+// Map an in-memory question key to the matching `public.profiles` columns.
+// Returns an object that can be passed directly to upsertProfile.
+function profilePatchFor(key, value) {
+  switch (key) {
+    case 'name':
+      return null // handled separately (writes to users.name)
+    case 'nationality':
+      return { nationality: value }
+    case 'studies':
+      return parseStudies(value)
+    case 'gpa':
+      return parseGpa(value)
+    case 'field':
+      return { field: value }
+    case 'goal':
+      return { goal: value }
+    case 'destinations':
+      return { destinations: Array.isArray(value) ? value : [value] }
+    case 'needBased':
+      return { need_based: /^yes/i.test(String(value)) }
+    case 'extras':
+      return { extras: value }
+    case 'languages':
+      return { languages: String(value).split(/[,;]+/).map((s) => s.trim()).filter(Boolean) }
+    default:
+      return null
+  }
+}
+
 export default function Onboarding() {
   const navigate = useNavigate()
+  const { user } = useSession()
   const bodyRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -166,8 +198,20 @@ export default function Onboarding() {
     lockLastChips()
     pushUser(answerText)
 
-    const nextProfile = { ...profile, [currentQ.key]: value ?? answerText }
+    const finalValue = value ?? answerText
+    const nextProfile = { ...profile, [currentQ.key]: finalValue }
     setProfile(nextProfile)
+
+    // Persist immediately so the user can leave mid-onboarding and pick up
+    // exactly where they were.
+    if (user?.id) {
+      if (currentQ.key === 'name') {
+        setUserName(user.id, finalValue)
+      } else {
+        const patch = profilePatchFor(currentQ.key, finalValue)
+        if (patch) upsertProfile(user.id, patch)
+      }
+    }
 
     const nextIdx = currentIdx + 1
     setTyping(true)

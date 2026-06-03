@@ -41,7 +41,7 @@ create table if not exists public.profiles (
   need_based    boolean,
   extras        text,
   languages     text[] default '{}',
-  completion    int not null default 0,
+  completion_pct int not null default 0,
   updated_at    timestamptz not null default now()
 );
 
@@ -91,7 +91,11 @@ create table if not exists public.applications (
   docs_ready      int not null default 0,
   docs_total      int not null default 3,
   notes           text,
+  reminder_set    boolean not null default false,
+  reminder_days   int,
   reminder_at     timestamptz,
+  is_new          boolean not null default true,
+  documents       jsonb not null default '{}'::jsonb,
   result_status   text check (result_status in ('won','lost','pending')),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),

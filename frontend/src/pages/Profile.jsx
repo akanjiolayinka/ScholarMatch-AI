@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppNav from '../components/AppNav'
+import { useSession } from '../lib/useSession'
+import { fetchProfile, upsertProfile, setUserName } from '../lib/profileApi'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import './Profile.css'
 
 const GOALS = ['Fund undergrad', 'Postgrad abroad', 'PhD', 'All']
@@ -46,11 +49,68 @@ function initialsFrom(name) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
 }
 
+// Map our in-memory form (camelCase) to/from the `public.profiles` row
+// (snake_case). The form also carries name + email which live on `users` /
+// `notification_prefs`, not `profiles`.
+function rowToForm(row, base) {
+  if (!row) return base
+  return {
+    ...base,
+    nationality: row.nationality ?? base.nationality,
+    university: row.university ?? base.university,
+    degree: row.degree ?? base.degree,
+    level: row.level ?? base.level,
+    gpa: row.gpa != null ? String(row.gpa) : base.gpa,
+    gpaScale: row.gpa_scale != null ? String(row.gpa_scale) : base.gpaScale,
+    field: row.field ?? base.field,
+    goal: row.goal ?? base.goal,
+    destinations: row.destinations?.length ? row.destinations : base.destinations,
+    needBased: row.need_based ?? base.needBased,
+    extras: row.extras ?? base.extras,
+    languages: row.languages?.length ? row.languages.join(', ') : base.languages,
+  }
+}
+
+function formToProfileRow(form) {
+  return {
+    nationality: form.nationality,
+    university: form.university,
+    degree: form.degree,
+    level: form.level,
+    gpa: form.gpa ? parseFloat(form.gpa) : null,
+    gpa_scale: form.gpaScale ? parseFloat(form.gpaScale) : null,
+    field: form.field,
+    goal: form.goal,
+    destinations: form.destinations,
+    need_based: form.needBased,
+    extras: form.extras,
+    languages: form.languages ? form.languages.split(/[,;]+/).map((s) => s.trim()).filter(Boolean) : [],
+  }
+}
+
 export default function Profile() {
   const navigate = useNavigate()
+  const { user } = useSession()
   const [profile, setProfile] = useState(INITIAL)
   const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+
+  // Hydrate from Supabase on mount. Falls back to INITIAL for the design
+  // demo if Supabase isn't configured or the row doesn't exist yet.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!user?.id) return
+      const row = await fetchProfile(user.id)
+      if (cancelled) return
+      if (row) setProfile((p) => rowToForm(row, p))
+      if (user.email) setProfile((p) => ({ ...p, email: user.email }))
+      if (user.user_metadata?.full_name) setProfile((p) => ({ ...p, name: user.user_metadata.full_name }))
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user])
 
   const completion = useMemo(() => computeCompletion(profile), [profile])
   const initials = useMemo(() => initialsFrom(profile.name) || 'TA', [profile.name])
@@ -76,13 +136,34 @@ export default function Profile() {
     window.setTimeout(() => setToast(''), 2400)
   }
 
-  function save() {
-    // Persist to Supabase: supabase.from('profiles').upsert({ user_id, ...profile })
+  async function save() {
+    if (!user?.id || !isSupabaseConfigured) {
+      setDirty(false)
+      showToast('Profile saved — re-running your matches now.')
+      return
+    }
+    setSaving(true)
+    const row = formToProfileRow(profile)
+    await upsertProfile(user.id, row)
+    if (profile.name) await setUserName(user.id, profile.name)
+    setSaving(false)
     setDirty(false)
     showToast('Profile saved — re-running your matches now.')
   }
 
-  function saveNotifs() {
+  async function saveNotifs() {
+    if (user?.id && isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('notification_prefs')
+        .upsert({
+          user_id: user.id,
+          email: profile.email,
+          new_matches: profile.newMatches,
+          deadlines: profile.deadlines,
+          weekly_digest: profile.weeklyDigest,
+        }, { onConflict: 'user_id' })
+      if (error) console.warn('saveNotifs:', error.message)
+    }
     setDirty(false)
     showToast('Preferences saved.')
   }
@@ -239,9 +320,9 @@ export default function Profile() {
         </div>
         <div className="pf-save-actions">
           <button className="pf-btn-outline" onClick={() => navigate('/dashboard')}>Back to matches</button>
-          <button className="pf-btn-primary" onClick={save} disabled={!dirty}>
+          <button className="pf-btn-primary" onClick={save} disabled={!dirty || saving}>
             <i className="ti ti-device-floppy" style={{ fontSize: 14 }} aria-hidden="true" />
-            Save & re-run matching
+            {saving ? 'Saving…' : 'Save & re-run matching'}
           </button>
         </div>
       </div>
