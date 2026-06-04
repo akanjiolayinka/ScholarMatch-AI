@@ -10,6 +10,9 @@ import {
   setReminder as setReminderApi,
   markSeen,
 } from '../lib/applicationsApi'
+import { useToast } from '../components/Toast'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
+import { MOCK_SCHOLARSHIPS, statusToCol } from '../lib/mockData'
 import './Tracker.css'
 
 const COLUMNS = [
@@ -68,16 +71,60 @@ function rowToCard(row) {
 export default function Tracker() {
   const navigate = useNavigate()
   const { user } = useSession()
-  // In demo mode (no Supabase env) we fall back to a static board so the page
-  // still demonstrates drag-and-drop without an auth round-trip.
-  const [cards, setCards] = useState(isSupabaseConfigured ? [] : INITIAL_CARDS)
-  const [loaded, setLoaded] = useState(!isSupabaseConfigured)
+  const toast = useToast()
+  const useMock = isMockMode() || hasMockSession()
+  // In demo/mock mode we seed the board from MOCK_SCHOLARSHIPS so the user
+  // sees a realistic kanban immediately.
+  const [cards, setCards] = useState(() => useMock
+    ? MOCK_SCHOLARSHIPS.map((s) => ({
+        id: s.id,
+        scholarshipId: s.id,
+        col: statusToCol(s.status),
+        name: s.name,
+        org: s.organization,
+        tags: s.tags,
+        deadline: s.deadline,
+        match: s.match_score,
+        fresh: s.is_new,
+        docsReady: s.status === 'applied' ? 3 : s.status === 'saved' ? 1 : null,
+        docsTotal: 3,
+        won: s.status === 'won',
+        submitted: s.submitted,
+        interview: s.interview,
+        awarded: s.awarded,
+        reminderKey: null,
+        reminderSet: false,
+      }))
+    : (isSupabaseConfigured ? [] : INITIAL_CARDS))
+  const [loaded, setLoaded] = useState(!isSupabaseConfigured || useMock)
   const [draggedId, setDraggedId] = useState(null)
   const [overCol, setOverCol] = useState(null)
   const [reminderFor, setReminderFor] = useState(null)
+  const [addOpen, setAddOpen] = useState(false)
   const popoverRef = useRef(null)
 
+  const untracked = MOCK_SCHOLARSHIPS.filter((s) => !cards.some((c) => c.scholarshipId === s.id))
+
+  function addScholarship(s) {
+    setCards((arr) => [...arr, {
+      id: `tmp-${s.id}-${Date.now()}`,
+      scholarshipId: s.id,
+      col: 'saved',
+      name: s.name,
+      org: s.organization,
+      tags: s.tags,
+      deadline: s.deadline,
+      match: s.match_score,
+      fresh: true,
+      docsReady: 0,
+      docsTotal: 3,
+    }])
+    setAddOpen(false)
+    toast.push(`Added ${s.name}`, 'success')
+  }
+
   useEffect(() => {
+    if (useMock) return
     let cancelled = false
     async function load() {
       if (!user?.id || !isSupabaseConfigured) return
@@ -88,7 +135,7 @@ export default function Tracker() {
     }
     load()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, useMock])
 
   const stats = useMemo(() => {
     const c = { saved: 0, applied: 0, interview: 0, result: 0, won: 0, urgent: 0 }
@@ -123,19 +170,23 @@ export default function Tracker() {
     setCards((arr) => arr.map((c) => c.id === id ? { ...c, col: colKey, won: colKey === 'result' ? true : c.won } : c))
     setDraggedId(null)
     setOverCol(null)
-    if (isSupabaseConfigured) updateStatus(id, colKey)
+    if (isSupabaseConfigured && !useMock) updateStatus(id, colKey)
+    const colTitle = COLUMNS.find((c) => c.key === colKey)?.title
+    toast.push(`Moved to ${colTitle}`, 'success')
   }
 
   function toggleReminder(card, value) {
     const r = REMINDERS.find((x) => x.key === value)
     setCards((arr) => arr.map((c) => c.id === card.id ? { ...c, reminderKey: value, reminderSet: !!value } : c))
     setReminderFor(null)
-    if (isSupabaseConfigured) setReminderApi(card.id, r?.days ?? null)
+    if (isSupabaseConfigured && !useMock) setReminderApi(card.id, r?.days ?? null)
+    if (value) toast.push(`Reminder set for ${r.label.toLowerCase()} the deadline`, 'success')
+    else toast.push('Reminder cancelled', 'info')
   }
 
   function openCard(card) {
-    if (card.fresh && isSupabaseConfigured) {
-      markSeen(card.id)
+    if (card.fresh) {
+      if (isSupabaseConfigured && !useMock) markSeen(card.id)
       setCards((arr) => arr.map((c) => c.id === card.id ? { ...c, fresh: false } : c))
     }
     navigate(`/apply/${card.scholarshipId || card.id}`)
@@ -152,7 +203,7 @@ export default function Tracker() {
         </div>
         <div className="tr-header-right">
           <button className="tr-btn-outline"><i className="ti ti-filter" style={{ fontSize: 13 }} aria-hidden="true" /> Filter</button>
-          <button className="tr-btn-primary" onClick={() => navigate('/dashboard')}>
+          <button className="tr-btn-primary" onClick={() => setAddOpen(true)}>
             <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" /> Add scholarship
           </button>
         </div>
@@ -210,6 +261,30 @@ export default function Tracker() {
           )
         })}
       </div>
+
+      {addOpen && (
+        <div className="tr-modal-backdrop" onClick={() => setAddOpen(false)}>
+          <div className="tr-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add scholarship to tracker">
+            <div className="tr-modal-head">
+              <div className="tr-modal-title">Add a scholarship</div>
+              <button className="tr-modal-close" onClick={() => setAddOpen(false)} aria-label="Close"><i className="ti ti-x" style={{ fontSize: 16 }} aria-hidden="true" /></button>
+            </div>
+            <div className="tr-modal-body">
+              {untracked.length === 0
+                ? <div className="tr-modal-empty">You're already tracking every match.</div>
+                : untracked.map((s) => (
+                    <button key={s.id} className="tr-modal-item" onClick={() => addScholarship(s)}>
+                      <div className="tr-modal-item-info">
+                        <div className="tr-modal-item-name">{s.name}</div>
+                        <div className="tr-modal-item-org">{s.organization} · {s.amount}</div>
+                      </div>
+                      <i className="ti ti-plus" style={{ fontSize: 16, color: 'var(--color-text-tertiary)' }} aria-hidden="true" />
+                    </button>
+                  ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

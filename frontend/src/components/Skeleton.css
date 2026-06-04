@@ -1,0 +1,5 @@
+.sk-bar { display: inline-block; background: linear-gradient(90deg, #E5E4DF 0%, #F0F0EC 50%, #E5E4DF 100%); background-size: 200% 100%; animation: skShimmer 1.4s linear infinite; border-radius: 6px; }
+@keyframes skShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+.sk-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }
+.sk-row { display: flex; align-items: center; gap: 8px; }

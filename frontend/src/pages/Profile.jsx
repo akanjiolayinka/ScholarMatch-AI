@@ -4,32 +4,22 @@ import AppNav from '../components/AppNav'
 import { useSession } from '../lib/useSession'
 import { fetchProfile, upsertProfile, setUserName } from '../lib/profileApi'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { useToast } from '../components/Toast'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
+import { MOCK_PROFILE } from '../lib/mockData'
 import './Profile.css'
 
 const GOALS = ['Fund undergrad', 'Postgrad abroad', 'PhD', 'All']
 const DESTINATIONS = ['UK', 'USA', 'Germany', 'Canada', 'Netherlands', 'France', 'Australia', 'Nigeria', 'Open to anywhere']
 
-const INITIAL = {
-  name: 'Temi Adeyemi',
-  university: 'University of Lagos',
-  degree: 'Computer Engineering',
-  level: '300 level',
-  gpa: '4.3',
-  gpaScale: '5',
-  field: 'Software engineering',
-  nationality: 'Nigerian',
-  dob: '',
-  languages: 'English, Yoruba',
-  goal: 'Postgrad abroad',
-  destinations: ['UK', 'Germany'],
-  extras: 'Technical lead, UNILAG Faculty Innovation Club. Mentored 12 juniors in programming.',
-  projects: 'NFC Smart Attendance System (deployed across 3 departments). Budget Tracker App (200+ active users).',
-  needBased: true,
-  email: 'dolapo.icon@gmail.com',
-  newMatches: true,
-  deadlines: true,
-  weeklyDigest: false,
+// Pull saved notification toggles out of localStorage so they survive reloads
+// even in mock mode.
+function loadStoredNotifs() {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(window.localStorage.getItem('scholarmatch_notifs') || '{}') } catch { return {} }
 }
+
+const INITIAL = { ...MOCK_PROFILE, dob: '', ...loadStoredNotifs() }
 
 const REQUIRED = ['name', 'university', 'degree', 'gpa', 'field', 'nationality', 'goal', 'extras']
 
@@ -91,14 +81,16 @@ function formToProfileRow(form) {
 export default function Profile() {
   const navigate = useNavigate()
   const { user } = useSession()
+  const toastApi = useToast()
+  const useMock = isMockMode() || hasMockSession()
   const [profile, setProfile] = useState(INITIAL)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState('')
 
-  // Hydrate from Supabase on mount. Falls back to INITIAL for the design
-  // demo if Supabase isn't configured or the row doesn't exist yet.
+  // Hydrate from Supabase on mount. Falls back to INITIAL (mock profile) when
+  // running in demo mode.
   useEffect(() => {
+    if (useMock) return
     let cancelled = false
     async function load() {
       if (!user?.id) return
@@ -110,7 +102,7 @@ export default function Profile() {
     }
     load()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, useMock])
 
   const completion = useMemo(() => computeCompletion(profile), [profile])
   const initials = useMemo(() => initialsFrom(profile.name) || 'TA', [profile.name])
@@ -131,28 +123,24 @@ export default function Profile() {
     setDirty(true)
   }
 
-  function showToast(msg) {
-    setToast(msg)
-    window.setTimeout(() => setToast(''), 2400)
-  }
-
   async function save() {
-    if (!user?.id || !isSupabaseConfigured) {
-      setDirty(false)
-      showToast('Profile saved — re-running your matches now.')
-      return
-    }
     setSaving(true)
-    const row = formToProfileRow(profile)
-    await upsertProfile(user.id, row)
-    if (profile.name) await setUserName(user.id, profile.name)
+    if (user?.id && isSupabaseConfigured && !useMock) {
+      const row = formToProfileRow(profile)
+      await upsertProfile(user.id, row)
+      if (profile.name) await setUserName(user.id, profile.name)
+    } else {
+      // Persist the form locally so reloads in demo mode keep edits.
+      try { window.localStorage.setItem('scholarmatch_profile', JSON.stringify(profile)) } catch {}
+      await new Promise((r) => setTimeout(r, 400))
+    }
     setSaving(false)
     setDirty(false)
-    showToast('Profile saved — re-running your matches now.')
+    toastApi.push('Profile saved — matches updated', 'success')
   }
 
   async function saveNotifs() {
-    if (user?.id && isSupabaseConfigured) {
+    if (user?.id && isSupabaseConfigured && !useMock) {
       const { error } = await supabase
         .from('notification_prefs')
         .upsert({
@@ -164,8 +152,16 @@ export default function Profile() {
         }, { onConflict: 'user_id' })
       if (error) console.warn('saveNotifs:', error.message)
     }
+    try {
+      window.localStorage.setItem('scholarmatch_notifs', JSON.stringify({
+        newMatches: profile.newMatches,
+        deadlines: profile.deadlines,
+        weeklyDigest: profile.weeklyDigest,
+        email: profile.email,
+      }))
+    } catch {}
     setDirty(false)
-    showToast('Preferences saved.')
+    toastApi.push('Preferences saved', 'success')
   }
 
   return (
@@ -327,11 +323,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {toast && (
-        <div className="pf-toast" role="status">
-          <i className="ti ti-check" aria-hidden="true" /> {toast}
-        </div>
-      )}
     </div>
   )
 }

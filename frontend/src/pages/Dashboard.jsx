@@ -10,6 +10,9 @@ import {
 } from '../lib/scholarships'
 import { useSession } from '../lib/useSession'
 import { saveApplication, deleteApplication } from '../lib/applicationsApi'
+import { useToast } from '../components/Toast'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
+import { SkeletonCard, useFirstMountLoading } from '../components/Skeleton'
 import './Dashboard.css'
 
 const CATEGORIES = [
@@ -31,6 +34,9 @@ const DESTINATIONS = ['UK', 'Germany', 'USA', 'Canada', 'Netherlands', 'France',
 export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useSession()
+  const toast = useToast()
+  const useMock = isMockMode() || hasMockSession()
+  const loading = useFirstMountLoading(1500)
   const [category, setCategory] = useState('all')
   const [deadlineFilter, setDeadlineFilter] = useState(null)
   const [destinations, setDestinations] = useState(['UK', 'Germany'])
@@ -48,19 +54,19 @@ export default function Dashboard() {
       const next = new Set(s)
       if (next.has(id)) {
         next.delete(id)
-        if (user?.id) deleteApplication(user.id, id)
+        if (user?.id && !useMock) deleteApplication(user.id, id)
+        toast.push('Removed from tracker', 'info')
       } else {
         next.add(id)
-        if (user?.id) saveApplication(user.id, id, scholarship.match)
+        if (user?.id && !useMock) saveApplication(user.id, id, scholarship.match)
+        toast.push('Added to tracker', 'success')
       }
       return next
     })
   }
 
   function applyTo(scholarship) {
-    // Insert as saved before navigating to the assistant so it shows up
-    // on the tracker even if the user backs out.
-    if (user?.id) saveApplication(user.id, scholarship.id, scholarship.match)
+    if (user?.id && !useMock) saveApplication(user.id, scholarship.id, scholarship.match)
     navigate(`/apply/${scholarship.id}`)
   }
 
@@ -234,15 +240,19 @@ export default function Dashboard() {
             </div>
           )}
 
-          {filtered.length > 0 ? (
+          {loading ? (
+            <div className="db-cards">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : filtered.length > 0 ? (
             <div className="db-cards">
               {filtered.map((s) => (
                 <Card
                   key={s.id}
                   s={s}
                   saved={saved.has(s.id)}
-                  onSave={() => toggleSaved(s.id)}
-                  onApply={() => navigate(`/apply/${s.id}`)}
+                  onSave={() => toggleSaved(s)}
+                  onApply={() => applyTo(s)}
                 />
               ))}
             </div>

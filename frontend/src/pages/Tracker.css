@@ -66,6 +66,23 @@
 .tr-reminder-popover button:hover { background: var(--color-background-secondary); }
 .tr-reminder-popover .sep { height: 0.5px; background: var(--color-border-tertiary); margin: 4px 0; }
 
+.tr-modal-backdrop { position: fixed; inset: 0; background: rgba(10,14,42,0.4); backdrop-filter: blur(4px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; animation: trFade 0.18s ease; }
+@keyframes trFade { from { opacity: 0; } to { opacity: 1; } }
+.tr-modal { background: var(--color-background-primary); border-radius: 14px; width: 100%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(10,14,42,0.25); animation: trUp 0.2s ease; overflow: hidden; }
+@keyframes trUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.tr-modal-head { padding: 18px 20px; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: center; justify-content: space-between; }
+.tr-modal-title { font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 600; }
+.tr-modal-close { background: none; border: none; padding: 6px; cursor: pointer; color: var(--color-text-tertiary); border-radius: 6px; }
+.tr-modal-close:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+.tr-modal-body { padding: 8px 0; overflow-y: auto; flex: 1; }
+.tr-modal-item { width: 100%; padding: 14px 20px; background: none; border: none; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-family: inherit; text-align: left; transition: background 0.15s; }
+.tr-modal-item:last-child { border-bottom: none; }
+.tr-modal-item:hover { background: var(--color-background-secondary); }
+.tr-modal-item-info { flex: 1; min-width: 0; }
+.tr-modal-item-name { font-size: 14px; font-weight: 500; }
+.tr-modal-item-org { font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px; }
+.tr-modal-empty { padding: 32px 20px; text-align: center; color: var(--color-text-tertiary); font-size: 13px; }
+
 @media (max-width: 1080px) {
   .tr-board { grid-template-columns: repeat(2, 1fr); }
 }
