@@ -36,3 +36,14 @@ export async function patch(path, body) {
   if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`)
   return res.json()
 }
+
+// Sync the Supabase user into our `users` table. Safe to call on every login.
+export async function syncUser() {
+  if (!API_URL) return { skipped: true }
+  try {
+    return await post('/api/auth/sync', {})
+  } catch (err) {
+    console.warn('syncUser failed:', err.message)
+    return { error: err.message }
+  }
+}

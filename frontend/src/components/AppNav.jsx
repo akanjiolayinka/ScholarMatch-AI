@@ -1,15 +1,16 @@
 import { NavLink, Link } from 'react-router-dom'
 import Logo from './Logo'
+import UserMenu from './UserMenu'
 import './AppNav.css'
 
 const LINKS = [
   { to: '/dashboard', label: 'Matches', icon: 'ti-star' },
-  { to: '/apply', label: 'Apply', icon: 'ti-file-text' },
+  { to: '/apply/s1', label: 'Apply', icon: 'ti-file-text' },
   { to: '/tracker', label: 'Tracker', icon: 'ti-layout-kanban' },
   { to: '/profile', label: 'Profile', icon: 'ti-user' },
 ]
 
-export default function AppNav({ initials = 'TA', notify = true }) {
+export default function AppNav({ notify = true }) {
   return (
     <nav className="app-nav">
       <Link to="/dashboard" aria-label="ScholarMatch AI home"><Logo size={26} textSize={15} /></Link>
@@ -26,7 +27,7 @@ export default function AppNav({ initials = 'TA', notify = true }) {
           <i className="ti ti-bell" style={{ fontSize: 15 }} aria-hidden="true" />
           {notify && <div className="app-notif-dot" />}
         </button>
-        <Link to="/profile" className="app-avatar">{initials}</Link>
+        <UserMenu />
       </div>
     </nav>
   )

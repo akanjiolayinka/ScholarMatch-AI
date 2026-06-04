@@ -1,0 +1,14 @@
+.um-wrap { position: relative; }
+.um-trigger { width: 32px; height: 32px; border-radius: 50%; background: #0A0E2A; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #F5A623; font-family: 'Sora', sans-serif; cursor: pointer; border: none; transition: transform 0.15s; }
+.um-trigger:hover { transform: scale(1.06); }
+
+.um-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 6px; box-shadow: 0 8px 24px rgba(10, 14, 42, 0.12); z-index: 50; animation: umIn 0.15s ease; }
+@keyframes umIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.um-id { padding: 10px 12px; }
+.um-id-name { font-size: 13px; font-weight: 500; }
+.um-id-email { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.um-sep { height: 0.5px; background: var(--color-border-tertiary); margin: 4px 0; }
+.um-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; color: var(--color-text-primary); cursor: pointer; border-radius: 5px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+.um-item:hover { background: var(--color-background-secondary); }
+.um-item.danger { color: #A32D2D; }
+.um-item.danger:hover { background: #FCEBEB; }

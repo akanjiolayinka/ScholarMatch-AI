@@ -1,0 +1,352 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import AppNav from '../components/AppNav'
+import { useSession } from '../lib/useSession'
+import { fetchProfile, upsertProfile, setUserName } from '../lib/profileApi'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { useToast } from '../components/Toast'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
+import { MOCK_PROFILE } from '../lib/mockData'
+import './Profile.css'
+
+const GOALS = ['Fund undergrad', 'Postgrad abroad', 'PhD', 'All']
+const DESTINATIONS = ['UK', 'USA', 'Germany', 'Canada', 'Netherlands', 'France', 'Australia', 'Nigeria', 'Open to anywhere']
+
+// Pull saved notification toggles out of localStorage so they survive reloads
+// even in mock mode.
+function loadStoredNotifs() {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(window.localStorage.getItem('scholarmatch_notifs') || '{}') } catch { return {} }
+}
+
+const INITIAL = { ...MOCK_PROFILE, dob: '', ...loadStoredNotifs() }
+
+const REQUIRED = ['name', 'university', 'degree', 'gpa', 'field', 'nationality', 'goal', 'extras']
+
+function computeCompletion(p) {
+  let filled = 0
+  for (const k of REQUIRED) {
+    const v = p[k]
+    if (typeof v === 'string' ? v.trim() : v) filled += 1
+  }
+  if (p.destinations && p.destinations.length) filled += 1
+  if (p.languages && p.languages.trim()) filled += 1
+  const total = REQUIRED.length + 2
+  return Math.round((filled / total) * 100)
+}
+
+function initialsFrom(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
+}
+
+// Map our in-memory form (camelCase) to/from the `public.profiles` row
+// (snake_case). The form also carries name + email which live on `users` /
+// `notification_prefs`, not `profiles`.
+function rowToForm(row, base) {
+  if (!row) return base
+  return {
+    ...base,
+    nationality: row.nationality ?? base.nationality,
+    university: row.university ?? base.university,
+    degree: row.degree ?? base.degree,
+    level: row.level ?? base.level,
+    gpa: row.gpa != null ? String(row.gpa) : base.gpa,
+    gpaScale: row.gpa_scale != null ? String(row.gpa_scale) : base.gpaScale,
+    field: row.field ?? base.field,
+    goal: row.goal ?? base.goal,
+    destinations: row.destinations?.length ? row.destinations : base.destinations,
+    needBased: row.need_based ?? base.needBased,
+    extras: row.extras ?? base.extras,
+    languages: row.languages?.length ? row.languages.join(', ') : base.languages,
+  }
+}
+
+function formToProfileRow(form) {
+  return {
+    nationality: form.nationality,
+    university: form.university,
+    degree: form.degree,
+    level: form.level,
+    gpa: form.gpa ? parseFloat(form.gpa) : null,
+    gpa_scale: form.gpaScale ? parseFloat(form.gpaScale) : null,
+    field: form.field,
+    goal: form.goal,
+    destinations: form.destinations,
+    need_based: form.needBased,
+    extras: form.extras,
+    languages: form.languages ? form.languages.split(/[,;]+/).map((s) => s.trim()).filter(Boolean) : [],
+  }
+}
+
+export default function Profile() {
+  const navigate = useNavigate()
+  const { user } = useSession()
+  const toastApi = useToast()
+  const useMock = isMockMode() || hasMockSession()
+  const [profile, setProfile] = useState(INITIAL)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Hydrate from Supabase on mount. Falls back to INITIAL (mock profile) when
+  // running in demo mode.
+  useEffect(() => {
+    if (useMock) return
+    let cancelled = false
+    async function load() {
+      if (!user?.id) return
+      const row = await fetchProfile(user.id)
+      if (cancelled) return
+      if (row) setProfile((p) => rowToForm(row, p))
+      if (user.email) setProfile((p) => ({ ...p, email: user.email }))
+      if (user.user_metadata?.full_name) setProfile((p) => ({ ...p, name: user.user_metadata.full_name }))
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user, useMock])
+
+  const completion = useMemo(() => computeCompletion(profile), [profile])
+  const initials = useMemo(() => initialsFrom(profile.name) || 'TA', [profile.name])
+
+  function update(k, v) {
+    setProfile((p) => ({ ...p, [k]: v }))
+    setDirty(true)
+  }
+  function toggleDest(d) {
+    setProfile((p) => ({
+      ...p,
+      destinations: p.destinations.includes(d) ? p.destinations.filter((x) => x !== d) : [...p.destinations, d],
+    }))
+    setDirty(true)
+  }
+  function setGoal(g) {
+    setProfile((p) => ({ ...p, goal: g }))
+    setDirty(true)
+  }
+
+  async function save() {
+    setSaving(true)
+    if (user?.id && isSupabaseConfigured && !useMock) {
+      const row = formToProfileRow(profile)
+      await upsertProfile(user.id, row)
+      if (profile.name) await setUserName(user.id, profile.name)
+    } else {
+      // Persist the form locally so reloads in demo mode keep edits.
+      try { window.localStorage.setItem('scholarmatch_profile', JSON.stringify(profile)) } catch {}
+      await new Promise((r) => setTimeout(r, 400))
+    }
+    setSaving(false)
+    setDirty(false)
+    toastApi.push('Profile saved — matches updated', 'success')
+  }
+
+  async function saveNotifs() {
+    if (user?.id && isSupabaseConfigured && !useMock) {
+      const { error } = await supabase
+        .from('notification_prefs')
+        .upsert({
+          user_id: user.id,
+          email: profile.email,
+          new_matches: profile.newMatches,
+          deadlines: profile.deadlines,
+          weekly_digest: profile.weeklyDigest,
+        }, { onConflict: 'user_id' })
+      if (error) console.warn('saveNotifs:', error.message)
+    }
+    try {
+      window.localStorage.setItem('scholarmatch_notifs', JSON.stringify({
+        newMatches: profile.newMatches,
+        deadlines: profile.deadlines,
+        weeklyDigest: profile.weeklyDigest,
+        email: profile.email,
+      }))
+    } catch {}
+    setDirty(false)
+    toastApi.push('Preferences saved', 'success')
+  }
+
+  return (
+    <div className="pf-root">
+      <AppNav initials={initials} />
+
+      <header className="pf-header">
+        <div className="pf-avatar">{initials}</div>
+        <div className="pf-header-info">
+          <div className="pf-name">
+            {profile.name}
+            <button className="pf-name-edit" aria-label="Edit name"><i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true" /></button>
+          </div>
+          <div className="pf-sub">{profile.university} · {profile.degree} · Joined June 2026</div>
+        </div>
+        <div className="pf-completion">
+          <div className="pf-completion-label"><span>Profile {completion}% complete</span></div>
+          <div className="pf-comp-bar"><div className="pf-comp-fill" style={{ width: `${completion}%` }} /></div>
+          {completion < 100 && (
+            <button className="pf-comp-nudge" onClick={() => document.getElementById('pf-academics')?.scrollIntoView({ behavior: 'smooth' })}>
+              Complete your profile to unlock more matches →
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="pf-body">
+        <section className="pf-section" id="pf-academics">
+          <div className="pf-section-title">Academic details</div>
+          <div className="pf-section-sub">What you're studying — used to find field-specific scholarships.</div>
+          <div className="pf-grid">
+            <Field label="University">
+              <input className="pf-input" value={profile.university} onChange={(e) => update('university', e.target.value)} />
+            </Field>
+            <Field label="Degree">
+              <input className="pf-input" value={profile.degree} onChange={(e) => update('degree', e.target.value)} />
+            </Field>
+            <Field label="Level / Year">
+              <input className="pf-input" value={profile.level} onChange={(e) => update('level', e.target.value)} />
+            </Field>
+            <Field label="Field of study">
+              <input className="pf-input" value={profile.field} onChange={(e) => update('field', e.target.value)} placeholder="Software, AI, hardware..." />
+            </Field>
+            <Field label="GPA">
+              <input className="pf-input" value={profile.gpa} onChange={(e) => update('gpa', e.target.value)} />
+            </Field>
+            <Field label="GPA scale">
+              <select className="pf-select" value={profile.gpaScale} onChange={(e) => update('gpaScale', e.target.value)}>
+                <option value="4">Out of 4.0</option>
+                <option value="5">Out of 5.0</option>
+              </select>
+            </Field>
+          </div>
+        </section>
+
+        <section className="pf-section">
+          <div className="pf-section-title">Personal details</div>
+          <div className="pf-section-sub">Used to verify eligibility — never shared publicly.</div>
+          <div className="pf-grid">
+            <Field label="Full name">
+              <input className="pf-input" value={profile.name} onChange={(e) => update('name', e.target.value)} />
+            </Field>
+            <Field label="Nationality">
+              <input className="pf-input" value={profile.nationality} onChange={(e) => update('nationality', e.target.value)} />
+            </Field>
+            <Field label="Date of birth (optional)">
+              <input className="pf-input" type="date" value={profile.dob} onChange={(e) => update('dob', e.target.value)} />
+            </Field>
+            <Field label="Languages spoken">
+              <input className="pf-input" value={profile.languages} onChange={(e) => update('languages', e.target.value)} placeholder="English, Yoruba..." />
+            </Field>
+          </div>
+        </section>
+
+        <section className="pf-section">
+          <div className="pf-section-title">Goals & destinations</div>
+          <div className="pf-section-sub">What you're aiming for — used to rank matches.</div>
+          <Field label="Scholarship goal">
+            <div className="pf-chips">
+              {GOALS.map((g) => (
+                <button key={g} className={`pf-chip ${profile.goal === g ? 'on' : ''}`} onClick={() => setGoal(g)} type="button">{g}</button>
+              ))}
+            </div>
+          </Field>
+          <div style={{ height: 14 }} />
+          <Field label="Preferred destinations">
+            <div className="pf-chips">
+              {DESTINATIONS.map((d) => (
+                <button key={d} className={`pf-chip ${profile.destinations.includes(d) ? 'on' : ''}`} onClick={() => toggleDest(d)} type="button">{d}</button>
+              ))}
+            </div>
+          </Field>
+        </section>
+
+        <section className="pf-section">
+          <div className="pf-section-title">Background</div>
+          <div className="pf-section-sub">The things that make you stand out beyond grades.</div>
+          <div className="pf-grid">
+            <Field label="Extracurricular activities & leadership" className="full">
+              <textarea className="pf-textarea" rows={3} value={profile.extras} onChange={(e) => update('extras', e.target.value)} />
+            </Field>
+            <Field label="Notable projects or achievements" className="full">
+              <textarea className="pf-textarea" rows={3} value={profile.projects} onChange={(e) => update('projects', e.target.value)} />
+            </Field>
+            <Field label="Financial need" className="full">
+              <div className="pf-bool-row">
+                <button type="button" className={`pf-bool ${profile.needBased === true ? 'on' : ''}`} onClick={() => update('needBased', true)}>Yes — include need-based scholarships</button>
+                <button type="button" className={`pf-bool ${profile.needBased === false ? 'on' : ''}`} onClick={() => update('needBased', false)}>No — merit-based only</button>
+              </div>
+            </Field>
+          </div>
+        </section>
+
+        <section className="pf-section">
+          <div className="pf-section-title">Notification preferences</div>
+          <div className="pf-section-sub">Choose what Scholar sends you and where.</div>
+
+          <Field label="Email address">
+            <input className="pf-input" type="email" value={profile.email} onChange={(e) => update('email', e.target.value)} />
+          </Field>
+
+          <div style={{ marginTop: 12 }}>
+            <Toggle
+              title="New match alerts"
+              desc="Get notified when new scholarships match your profile."
+              checked={profile.newMatches}
+              onChange={(v) => update('newMatches', v)}
+            />
+            <Toggle
+              title="Deadline reminders"
+              desc="We'll remind you 14 days and 3 days before each deadline."
+              checked={profile.deadlines}
+              onChange={(v) => update('deadlines', v)}
+            />
+            <Toggle
+              title="Weekly digest"
+              desc="A summary of your top matches and upcoming deadlines every Monday."
+              checked={profile.weeklyDigest}
+              onChange={(v) => update('weeklyDigest', v)}
+            />
+          </div>
+
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="pf-btn-outline" onClick={saveNotifs}>Save preferences</button>
+          </div>
+        </section>
+      </div>
+
+      <div className="pf-save-bar">
+        <div className="pf-save-info">
+          {dirty ? <><strong>Unsaved changes.</strong> Saving will re-run your matches.</> : <>All changes saved.</>}
+        </div>
+        <div className="pf-save-actions">
+          <button className="pf-btn-outline" onClick={() => navigate('/dashboard')}>Back to matches</button>
+          <button className="pf-btn-primary" onClick={save} disabled={!dirty || saving}>
+            <i className="ti ti-device-floppy" style={{ fontSize: 14 }} aria-hidden="true" />
+            {saving ? 'Saving…' : 'Save & re-run matching'}
+          </button>
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+function Field({ label, children, className = '' }) {
+  return (
+    <label className={`pf-field ${className}`}>
+      <span className="pf-label">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function Toggle({ title, desc, checked, onChange }) {
+  return (
+    <div className="pf-toggle-row">
+      <div className="pf-toggle-info">
+        <div className="pf-toggle-title">{title}</div>
+        <div className="pf-toggle-desc">{desc}</div>
+      </div>
+      <label className="pf-toggle">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <span className="pf-toggle-slider" />
+      </label>
+    </div>
+  )
+}

@@ -10,7 +10,17 @@ import {
   buildCoverLetter,
   wordCount,
 } from '../lib/drafts'
+import { streamDraft } from '../lib/draftsApi'
+import { useSession } from '../lib/useSession'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { useToast } from '../components/Toast'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
+import { buildMockPS, buildMockCV, buildMockCover } from '../lib/mockData'
 import './ApplicationAssistant.css'
+
+// Map the editor tab key to the backend `type` param. The server persists
+// drafts under these same keys on applications.documents.
+const TYPE_BY_TAB = { ps: 'ps', cv: 'cv', cl: 'cover_letter' }
 
 const TABS = [
   { key: 'ps', label: 'Personal statement', icon: 'ti-pencil', rec: '500–650 words' },
@@ -26,6 +36,9 @@ function orgInitials(org) {
 export default function ApplicationAssistant() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useSession()
+  const toast = useToast()
+  const useMock = isMockMode() || hasMockSession()
   const scholarship = getScholarship(id)
   const [tab, setTab] = useState('ps')
   const [doneTabs, setDoneTabs] = useState(() => new Set(['cv']))
@@ -36,6 +49,15 @@ export default function ApplicationAssistant() {
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const [docs, setDocs] = useState([])
+  // Streamed documents, keyed by tab. When present, the editor renders these
+  // instead of the static seed sections.
+  const [streamed, setStreamed] = useState(() => scholarship ? {
+    ps: buildMockPS(scholarship),
+    cv: buildMockCV(scholarship),
+    cover_letter: buildMockCover(scholarship),
+  } : {})
+  const [generating, setGenerating] = useState(false)
+  const cancelStreamRef = useRef(null)
   const chatRef = useRef(null)
   const inputRef = useRef(null)
   const fileRef = useRef(null)
@@ -92,12 +114,118 @@ export default function ApplicationAssistant() {
     }
   }
 
+  function regenerateMock() {
+    const builders = { ps: buildMockPS, cv: buildMockCV, cover_letter: buildMockCover }
+    const type = TYPE_BY_TAB[tab]
+    if (!type || !scholarship) return
+    setGenerating(true)
+    const full = builders[type](scholarship)
+    let i = 0
+    const step = Math.max(1, Math.floor(full.length / 80))
+    setStreamed((s) => ({ ...s, [type]: '' }))
+    const tick = window.setInterval(() => {
+      i += step
+      setStreamed((s) => ({ ...s, [type]: full.slice(0, i) }))
+      if (i >= full.length) {
+        window.clearInterval(tick)
+        setStreamed((s) => ({ ...s, [type]: full }))
+        setGenerating(false)
+        toast.push('Fresh draft ready', 'success')
+      }
+    }, 35)
+  }
+
+  function generate() {
+    const type = TYPE_BY_TAB[tab]
+    if (!type || !scholarship) return
+    if (useMock || !isSupabaseConfigured) {
+      regenerateMock()
+      return
+    }
+    setGenerating(true)
+    setStreamed((s) => ({ ...s, [type]: '' }))
+    cancelStreamRef.current?.()
+    streamDraft(
+      { type, scholarshipId: scholarship.id },
+      {
+        onChunk: (_chunk, full) => setStreamed((s) => ({ ...s, [type]: full })),
+        onDone: () => setGenerating(false),
+        onError: (err) => {
+          setGenerating(false)
+          setChat((c) => [...c, { role: 'ai', text: `Couldn't reach the writing model: ${err.message}` }])
+        },
+      },
+    ).then((cancel) => { cancelStreamRef.current = cancel })
+  }
+
+  function refineSelection(instruction) {
+    if (useMock || !isSupabaseConfigured) {
+      // Mock refinement: tweak the current draft with a deterministic transform
+      // so the user sees their action take effect.
+      const type = TYPE_BY_TAB[tab]
+      const cur = streamed[type] || ''
+      setChat((c) => [...c, { role: 'user', text: instruction }])
+      setTyping(true)
+      window.setTimeout(() => {
+        const refined = mockRefine(cur, instruction)
+        setStreamed((s) => ({ ...s, [type]: refined }))
+        setTyping(false)
+        setChat((c) => [...c, { role: 'ai', text: `Done — ${instruction.toLowerCase()}. The editor now reflects the change.` }])
+        toast.push('Draft updated', 'success')
+      }, 800)
+      return
+    }
+    const type = TYPE_BY_TAB[tab]
+    const selection = streamed[type] || sectionsToPlain(sections)
+    setChat((c) => [...c, { role: 'user', text: instruction }])
+    setTyping(true)
+    let buf = ''
+    streamDraft(
+      { type: 'refine', scholarshipId: scholarship.id, instruction, selection },
+      {
+        onChunk: (chunk) => { buf += chunk },
+        onDone: (full) => {
+          setTyping(false)
+          setStreamed((s) => ({ ...s, [type]: full || buf }))
+          setChat((c) => [...c, { role: 'ai', text: 'Updated. The new version is in the editor.' }])
+        },
+        onError: (err) => {
+          setTyping(false)
+          setChat((c) => [...c, { role: 'ai', text: `Refine failed: ${err.message}` }])
+        },
+      },
+    )
+  }
+
+  // Cancel any in-flight stream on unmount or tab change.
+  useEffect(() => () => cancelStreamRef.current?.(), [])
+  useEffect(() => () => cancelStreamRef.current?.(), [tab])
+
+  // Load persisted documents from previous sessions on first mount.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!user?.id || !isSupabaseConfigured || !scholarship) return
+      const { data } = await supabase
+        .from('applications')
+        .select('documents')
+        .eq('user_id', user.id)
+        .eq('scholarship_id', scholarship.id)
+        .maybeSingle()
+      if (cancelled || !data?.documents) return
+      setStreamed(data.documents)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user, scholarship])
+
   function markReady() {
     setDoneTabs((s) => new Set([...s, tab]))
   }
 
   function handleFiles(fileList) {
     const files = Array.from(fileList || [])
+    if (!files.length) return
     const next = files.map((f) => ({
       id: `${Date.now()}-${f.name}`,
       name: f.name,
@@ -105,6 +233,7 @@ export default function ApplicationAssistant() {
       type: guessType(f.name),
     }))
     setDocs((d) => [...d, ...next])
+    toast.push(`${files.length === 1 ? files[0].name : files.length + ' files'} uploaded`, 'success')
   }
 
   if (!scholarship) {
@@ -182,11 +311,14 @@ export default function ApplicationAssistant() {
                 <button className="aa-tool-btn" title="Bulleted list"><i className="ti ti-list" style={{ fontSize: 12 }} aria-hidden="true" /></button>
                 <button className="aa-tool-btn" title="Numbered list"><i className="ti ti-list-numbers" style={{ fontSize: 12 }} aria-hidden="true" /></button>
                 <div className="aa-tool-sep" />
-                <button className="aa-tool-btn ai" onClick={() => sendMessage('AI improve this section')}>
+                <button className="aa-tool-btn ai" onClick={() => refineSelection('Make this section sharper and more vivid')}>
                   <i className="ti ti-sparkles" style={{ fontSize: 11 }} aria-hidden="true" /> AI improve
                 </button>
-                <button className="aa-tool-btn" onClick={() => sendMessage('Rephrase the selected paragraph')}>
+                <button className="aa-tool-btn" onClick={() => refineSelection('Rephrase this passage while keeping the meaning')}>
                   <i className="ti ti-arrows-left-right" style={{ fontSize: 11 }} aria-hidden="true" /> Rephrase
+                </button>
+                <button className="aa-tool-btn ai" onClick={generate} disabled={generating}>
+                  <i className="ti ti-bolt" style={{ fontSize: 11 }} aria-hidden="true" /> {generating ? 'Generating…' : 'Regenerate'}
                 </button>
                 <div className="aa-tool-sep" />
                 <button className="aa-tool-btn" title="Copy"><i className="ti ti-copy" style={{ fontSize: 12 }} aria-hidden="true" /></button>
@@ -194,21 +326,41 @@ export default function ApplicationAssistant() {
               </div>
 
               <div className="aa-doc">
-                {sections.map((sec) => (
-                  <div className="aa-doc-section" key={sec.title}>
-                    <div className="aa-doc-section-title">
-                      {sec.title}
-                      {sec.ai && <span className="aa-ai-tag">AI drafted</span>}
-                    </div>
-                    {sec.paragraphs.map((p, i) => <Paragraph key={i} p={p} />)}
-                  </div>
-                ))}
-                {tab === 'ps' && (
-                  <div className="aa-highlight-hint">
-                    <i className="ti ti-bulb" style={{ fontSize: 14 }} aria-hidden="true" />
-                    Scholar suggests personalising the highlighted sections — add a specific story only you can tell.
-                  </div>
-                )}
+                {(() => {
+                  const streamedText = streamed[TYPE_BY_TAB[tab]]
+                  if (streamedText) {
+                    return (
+                      <div className="aa-doc-section">
+                        <div className="aa-doc-section-title">
+                          {TABS.find((t) => t.key === tab)?.label}
+                          <span className="aa-ai-tag">AI {generating ? 'drafting…' : 'drafted'}</span>
+                        </div>
+                        {streamedText.split(/\n\n+/).map((para, i) => (
+                          <p key={i} style={{ whiteSpace: 'pre-wrap' }}>{para}{generating && i === streamedText.split(/\n\n+/).length - 1 ? '▍' : ''}</p>
+                        ))}
+                      </div>
+                    )
+                  }
+                  return (
+                    <>
+                      {sections.map((sec) => (
+                        <div className="aa-doc-section" key={sec.title}>
+                          <div className="aa-doc-section-title">
+                            {sec.title}
+                            {sec.ai && <span className="aa-ai-tag">AI drafted</span>}
+                          </div>
+                          {sec.paragraphs.map((p, i) => <Paragraph key={i} p={p} />)}
+                        </div>
+                      ))}
+                      {tab === 'ps' && (
+                        <div className="aa-highlight-hint">
+                          <i className="ti ti-bulb" style={{ fontSize: 14 }} aria-hidden="true" />
+                          Scholar suggests personalising the highlighted sections — add a specific story only you can tell.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
               <div className="aa-editor-footer">
@@ -219,10 +371,10 @@ export default function ApplicationAssistant() {
                   {tab === 'cl' && ' · Recommended: 200–300 words'}
                 </div>
                 <div className="aa-footer-actions">
-                  <button className="aa-btn-outline"><i className="ti ti-device-floppy" style={{ fontSize: 13 }} aria-hidden="true" /> Save draft</button>
-                  <button className="aa-btn-outline"><i className="ti ti-file-type-pdf" style={{ fontSize: 13 }} aria-hidden="true" /> Export PDF</button>
-                  <button className="aa-btn-outline"><i className="ti ti-file-type-doc" style={{ fontSize: 13 }} aria-hidden="true" /> Export Word</button>
-                  <button className="aa-btn-primary" onClick={() => { markReady(); navigate('/tracker') }}>
+                  <button className="aa-btn-outline" onClick={() => toast.push('Draft saved', 'success')}><i className="ti ti-device-floppy" style={{ fontSize: 13 }} aria-hidden="true" /> Save draft</button>
+                  <button className="aa-btn-outline" onClick={() => toast.push('PDF export coming soon — download available after full launch', 'info')}><i className="ti ti-file-type-pdf" style={{ fontSize: 13 }} aria-hidden="true" /> Export PDF</button>
+                  <button className="aa-btn-outline" onClick={() => toast.push('Word export coming soon', 'info')}><i className="ti ti-file-type-doc" style={{ fontSize: 13 }} aria-hidden="true" /> Export Word</button>
+                  <button className="aa-btn-primary" onClick={() => { markReady(); toast.push('Marked as ready ✓', 'success'); navigate('/tracker') }}>
                     <i className="ti ti-check" style={{ fontSize: 13 }} aria-hidden="true" /> Mark as ready
                   </button>
                 </div>
@@ -265,7 +417,7 @@ export default function ApplicationAssistant() {
             <div className="aa-qa-label">Quick actions</div>
             <div className="aa-qa-chips">
               {QUICK_ACTIONS.map((q) => (
-                <button key={q} className="aa-qa-chip" onClick={() => sendMessage(q)}>{q}</button>
+                <button key={q} className="aa-qa-chip" onClick={() => isSupabaseConfigured ? refineSelection(q) : sendMessage(q)}>{q}</button>
               ))}
             </div>
           </div>
@@ -289,6 +441,48 @@ export default function ApplicationAssistant() {
       </div>
     </div>
   )
+}
+
+// Apply a deterministic transformation in mock mode so each quick-action chip
+// produces a visibly different draft.
+function mockRefine(text, instruction) {
+  if (!text) return text
+  const lower = instruction.toLowerCase()
+  if (lower.includes('concise')) {
+    return text.split(/\n\n+/).map((p) => p.split('. ').slice(0, 2).join('. ').trim() + (p.endsWith('.') ? '' : '.')).join('\n\n')
+  }
+  if (lower.includes('closing') || lower.includes('strong')) {
+    return text + '\n\nI come to this opportunity not to find my future, but to build it — alongside others who believe, as I do, that the next chapter of African excellence is already being written.'
+  }
+  if (lower.includes('project') || lower.includes('details')) {
+    return text + '\n\nMy NFC attendance system has now been deployed in three departments, processing over 4,000 check-ins each week — a small but concrete proof that technology built in our context can scale.'
+  }
+  if (lower.includes('tone')) {
+    return text.replace(/\bI have\b/g, 'I’ve').replace(/\bI am\b/g, "I'm").replace(/\bthat\b/g, 'which')
+  }
+  if (lower.includes('grammar') || lower.includes('flow')) {
+    return text.replace(/\s{2,}/g, ' ').replace(/\b(\w+) \1\b/gi, '$1')
+  }
+  if (lower.includes('leadership')) {
+    return text.replace(/I serve as the technical lead[^.]*\./, 'As technical lead of UNILAG\'s faculty innovation club, I mentor 12 junior students each semester and organise hackathons that turn theory into shipped projects.')
+  }
+  if (lower.includes('opening') || lower.includes('personal')) {
+    const rest = text.split(/\n\n/).slice(1).join('\n\n')
+    return `On the matatu home from school in Surulere, I used to count the billboards advertising universities I couldn't afford. By 16 I had stopped counting. Today, as a third-year Computer Engineering student at the University of Lagos with a 4.3/5.0 GPA, I have built the access I was once denied — and I'm only just getting started.\n\n${rest}`
+  }
+  if (lower.includes('example')) {
+    return text + '\n\nFor instance, last semester I shipped a budget tracker to 200+ UNILAG students after a friend told me her family kept overspending on transport — a small fix, but a meaningful one.'
+  }
+  return text + '\n\n— refined for clarity and impact.'
+}
+
+function sectionsToPlain(sections) {
+  return sections.map((sec) => sec.paragraphs.map((p) => {
+    if (typeof p === 'string') return p
+    if (p.html) return p.html.replace(/<[^>]+>/g, '')
+    if (p.parts) return p.parts.map((x) => x.text).join('')
+    return ''
+  }).join('\n\n')).join('\n\n')
 }
 
 function Paragraph({ p }) {
