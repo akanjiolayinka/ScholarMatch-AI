@@ -5,7 +5,7 @@ import './AppNav.css'
 
 const LINKS = [
   { to: '/dashboard', label: 'Matches', icon: 'ti-star' },
-  { to: '/apply', label: 'Apply', icon: 'ti-file-text' },
+  { to: '/apply/s1', label: 'Apply', icon: 'ti-file-text' },
   { to: '/tracker', label: 'Tracker', icon: 'ti-layout-kanban' },
   { to: '/profile', label: 'Profile', icon: 'ti-user' },
 ]
