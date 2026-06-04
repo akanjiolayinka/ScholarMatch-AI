@@ -8,6 +8,8 @@ import {
   matchTier,
   deadlineTier,
 } from '../lib/scholarships'
+import { useSession } from '../lib/useSession'
+import { saveApplication, deleteApplication } from '../lib/applicationsApi'
 import './Dashboard.css'
 
 const CATEGORIES = [
@@ -28,6 +30,7 @@ const DESTINATIONS = ['UK', 'Germany', 'USA', 'Canada', 'Netherlands', 'France',
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useSession()
   const [category, setCategory] = useState('all')
   const [deadlineFilter, setDeadlineFilter] = useState(null)
   const [destinations, setDestinations] = useState(['UK', 'Germany'])
@@ -39,12 +42,26 @@ export default function Dashboard() {
     setDestinations((arr) => arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d])
   }
 
-  function toggleSaved(id) {
+  function toggleSaved(scholarship) {
+    const id = scholarship.id
     setSaved((s) => {
       const next = new Set(s)
-      if (next.has(id)) next.delete(id); else next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+        if (user?.id) deleteApplication(user.id, id)
+      } else {
+        next.add(id)
+        if (user?.id) saveApplication(user.id, id, scholarship.match)
+      }
       return next
     })
+  }
+
+  function applyTo(scholarship) {
+    // Insert as saved before navigating to the assistant so it shows up
+    // on the tracker even if the user backs out.
+    if (user?.id) saveApplication(user.id, scholarship.id, scholarship.match)
+    navigate(`/apply/${scholarship.id}`)
   }
 
   const filtered = useMemo(() => {
@@ -209,8 +226,8 @@ export default function Dashboard() {
                     s={s}
                     fresh
                     saved={saved.has(s.id)}
-                    onSave={() => toggleSaved(s.id)}
-                    onApply={() => navigate(`/apply/${s.id}`)}
+                    onSave={() => toggleSaved(s)}
+                    onApply={() => applyTo(s)}
                   />
                 ))}
               </div>

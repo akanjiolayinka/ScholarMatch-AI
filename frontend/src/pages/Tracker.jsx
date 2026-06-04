@@ -1,7 +1,15 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppNav from '../components/AppNav'
 import { daysUntil, deadlineTier } from '../lib/scholarships'
+import { useSession } from '../lib/useSession'
+import { isSupabaseConfigured } from '../lib/supabase'
+import {
+  listApplications,
+  updateStatus,
+  setReminder as setReminderApi,
+  markSeen,
+} from '../lib/applicationsApi'
 import './Tracker.css'
 
 const COLUMNS = [
@@ -30,18 +38,57 @@ const INITIAL_CARDS = [
 ]
 
 const REMINDERS = [
-  { key: 'w1', label: '1 week before' },
-  { key: 'd3', label: '3 days before' },
-  { key: 'd1', label: '1 day before' },
+  { key: 'w1', label: '1 week before', days: 7 },
+  { key: 'd3', label: '3 days before', days: 3 },
+  { key: 'd1', label: '1 day before', days: 1 },
 ]
+
+// Build a tracker card view-model out of a Supabase `applications` row joined
+// with its `scholarship`.
+function rowToCard(row) {
+  const s = row.scholarship || {}
+  return {
+    id: row.id, // applications.id — used for updates
+    scholarshipId: row.scholarship_id,
+    col: row.status,
+    name: s.name || 'Untitled scholarship',
+    org: s.organisation || s.org || '',
+    tags: s.tags || [],
+    deadline: s.deadline,
+    match: row.match_score,
+    fresh: row.is_new,
+    docsReady: row.docs_ready ?? null,
+    docsTotal: row.docs_total ?? 3,
+    won: row.result_status === 'won',
+    reminderKey: REMINDERS.find((r) => r.days === row.reminder_days)?.key || null,
+    reminderSet: row.reminder_set,
+  }
+}
 
 export default function Tracker() {
   const navigate = useNavigate()
-  const [cards, setCards] = useState(INITIAL_CARDS)
+  const { user } = useSession()
+  // In demo mode (no Supabase env) we fall back to a static board so the page
+  // still demonstrates drag-and-drop without an auth round-trip.
+  const [cards, setCards] = useState(isSupabaseConfigured ? [] : INITIAL_CARDS)
+  const [loaded, setLoaded] = useState(!isSupabaseConfigured)
   const [draggedId, setDraggedId] = useState(null)
   const [overCol, setOverCol] = useState(null)
   const [reminderFor, setReminderFor] = useState(null)
   const popoverRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!user?.id || !isSupabaseConfigured) return
+      const rows = await listApplications(user.id)
+      if (cancelled) return
+      setCards(rows.map(rowToCard))
+      setLoaded(true)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user])
 
   const stats = useMemo(() => {
     const c = { saved: 0, applied: 0, interview: 0, result: 0, won: 0, urgent: 0 }
@@ -76,11 +123,22 @@ export default function Tracker() {
     setCards((arr) => arr.map((c) => c.id === id ? { ...c, col: colKey, won: colKey === 'result' ? true : c.won } : c))
     setDraggedId(null)
     setOverCol(null)
+    if (isSupabaseConfigured) updateStatus(id, colKey)
   }
 
   function toggleReminder(card, value) {
-    setCards((arr) => arr.map((c) => c.id === card.id ? { ...c, reminder: value } : c))
+    const r = REMINDERS.find((x) => x.key === value)
+    setCards((arr) => arr.map((c) => c.id === card.id ? { ...c, reminderKey: value, reminderSet: !!value } : c))
     setReminderFor(null)
+    if (isSupabaseConfigured) setReminderApi(card.id, r?.days ?? null)
+  }
+
+  function openCard(card) {
+    if (card.fresh && isSupabaseConfigured) {
+      markSeen(card.id)
+      setCards((arr) => arr.map((c) => c.id === card.id ? { ...c, fresh: false } : c))
+    }
+    navigate(`/apply/${card.scholarshipId || card.id}`)
   }
 
   return (
@@ -140,7 +198,7 @@ export default function Tracker() {
                     dragging={draggedId === card.id}
                     onDragStart={(e) => onDragStart(e, card.id)}
                     onDragEnd={onDragEnd}
-                    onClick={() => navigate(`/apply/${card.id}`)}
+                    onClick={() => openCard(card)}
                     onBell={() => setReminderFor(reminderFor === card.id ? null : card.id)}
                     reminderOpen={reminderFor === card.id}
                     onReminder={(v) => toggleReminder(card, v)}
@@ -234,14 +292,14 @@ function Card({ card, dragging, onDragStart, onDragEnd, onClick, onBell, reminde
 
       <div className="tr-card-row" style={{ position: 'relative' }}>
         <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>
-          {card.reminder ? `Reminder: ${REMINDERS.find((r) => r.key === card.reminder)?.label || card.reminder}` : ' '}
+          {card.reminderKey ? `Reminder: ${REMINDERS.find((r) => r.key === card.reminderKey)?.label || ''}` : ' '}
         </span>
         <button
-          className={`tr-bell ${card.reminder ? 'on' : ''}`}
+          className={`tr-bell ${card.reminderKey ? 'on' : ''}`}
           onClick={(e) => { e.stopPropagation(); onBell() }}
           aria-label="Set reminder"
         >
-          <i className={`ti ${card.reminder ? 'ti-bell-filled' : 'ti-bell'}`} style={{ fontSize: 14 }} aria-hidden="true" />
+          <i className={`ti ${card.reminderKey ? 'ti-bell-filled' : 'ti-bell'}`} style={{ fontSize: 14 }} aria-hidden="true" />
         </button>
         {reminderOpen && (
           <div
