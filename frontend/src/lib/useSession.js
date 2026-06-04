@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { isMockMode, hasMockSession, getMockSession, setMockSession } from './mockAuth'
 
-// Returns { session, user, loading }. Subscribes to auth changes for the
-// lifetime of the component so navigation reacts to login/logout immediately.
+// Returns { session, user, loading }. In mock mode (no Supabase env, placeholder
+// URL, or the demo-session flag in localStorage) it returns a fixed demo user
+// without ever hitting the network.
 export function useSession() {
-  const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState(() => (isMockMode() || hasMockSession()) ? getMockSession() : null)
+  const [loading, setLoading] = useState(() => !(isMockMode() || hasMockSession()))
 
   useEffect(() => {
+    if (isMockMode() || hasMockSession()) return
     if (!isSupabaseConfigured) {
       setLoading(false)
       return
@@ -34,6 +37,8 @@ export function useSession() {
 }
 
 export async function signOut() {
-  if (!isSupabaseConfigured) return
-  await supabase.auth.signOut()
+  setMockSession(false)
+  if (isSupabaseConfigured && !isMockMode()) await supabase.auth.signOut()
+  // Force a reload so every stale session-aware component resets.
+  if (typeof window !== 'undefined') window.location.assign('/')
 }

@@ -56,11 +56,20 @@
 .au-spinner { width: 14px; height: 14px; border: 1.5px solid rgba(255,255,255,0.3); border-top-color: #F5A623; border-radius: 50%; animation: auSpin 0.7s linear infinite; }
 @keyframes auSpin { to { transform: rotate(360deg); } }
 
+.au-back { position: absolute; top: 16px; left: 20px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,0.65); text-decoration: none; background: none; border: none; cursor: pointer; font-family: inherit; padding: 6px 10px; border-radius: 6px; transition: color 0.15s, background 0.15s; z-index: 2; }
+.au-back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.au-back-mobile { display: none; }
+
+.au-demo { width: 100%; padding: 12px 14px; border: 1px solid #F5A623; border-radius: var(--border-radius-md); background: #F5A623; color: #0A0E2A; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; transition: transform 0.15s, box-shadow 0.15s, background 0.15s; font-family: inherit; }
+.au-demo:hover { background: #F5B642; box-shadow: 0 4px 12px rgba(245,166,35,0.32); }
+.au-demo:active { transform: scale(0.97); }
+.au-demo-sub { font-size: 11px; color: var(--color-text-tertiary); text-align: center; margin: -8px 0 16px; }
+
 @media (max-width: 880px) {
   .au-wrap { grid-template-columns: 1fr; }
-  .au-left { padding: 32px 24px 40px; min-height: 220px; }
-  .au-quote { font-size: 18px; }
-  .au-quote-mark { font-size: 44px; margin-bottom: 8px; }
-  .au-left-bottom { display: none; }
-  .au-right { padding: 32px 24px 48px; }
+  .au-left { display: none; }
+  .au-right { padding: 56px 24px 32px; position: relative; }
+  .au-back-mobile { display: inline-flex; top: 14px; left: 14px; position: absolute; color: var(--color-text-secondary); }
+  .au-back-mobile:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
 }
+

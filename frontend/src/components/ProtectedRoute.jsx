@@ -1,13 +1,15 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useSession } from '../lib/useSession'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
 
-// In dev without Supabase configured, render children so the design is still
-// browsable. In production, gate behind a session.
+// In mock mode (no Supabase configured, or the user clicked "Continue as
+// demo"), let everything through unguarded. Otherwise gate on a session.
 export default function ProtectedRoute({ children }) {
   const { session, loading } = useSession()
   const location = useLocation()
 
+  if (isMockMode() || hasMockSession()) return children
   if (!isSupabaseConfigured) return children
 
   if (loading) {

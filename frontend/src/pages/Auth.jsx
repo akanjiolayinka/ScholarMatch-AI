@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useSession } from '../lib/useSession'
+import { setMockSession } from '../lib/mockAuth'
+import { useToast } from '../components/Toast'
 import Logo from '../components/Logo'
 import './Auth.css'
 
@@ -15,7 +17,14 @@ export default function Auth() {
     if (!sessionLoading && session) navigate(redirectTo, { replace: true })
   }, [sessionLoading, session, navigate, redirectTo])
 
+  const toast = useToast()
   const [mode, setMode] = useState('signup') // 'signup' | 'login'
+
+  function continueAsDemo() {
+    setMockSession(true)
+    toast.push('Welcome, Temi! Loading your demo profile…', 'success')
+    navigate('/onboarding', { replace: true })
+  }
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -102,6 +111,9 @@ export default function Auth() {
       <h2 className="sr-only">{isSignup ? 'Create your account' : 'Log in'} — ScholarMatch AI</h2>
 
       <aside className="au-left">
+        <button type="button" className="au-back" onClick={() => navigate('/')}>
+          <i className="ti ti-arrow-left" style={{ fontSize: 13 }} aria-hidden="true" /> Back to home
+        </button>
         <div className="au-left-top au-left-logo">
           <Link to="/"><Logo size={32} textSize={17} /></Link>
         </div>
@@ -119,6 +131,9 @@ export default function Auth() {
       </aside>
 
       <main className="au-right">
+        <button type="button" className="au-back-mobile" onClick={() => navigate('/')}>
+          <i className="ti ti-arrow-left" style={{ fontSize: 13 }} aria-hidden="true" /> Back to home
+        </button>
         <div className="au-form">
           <div className="au-tabs" role="tablist">
             <button className={`au-tab ${isSignup ? 'active' : ''}`} onClick={() => switchMode('signup')} role="tab" aria-selected={isSignup}>Sign up</button>
@@ -130,6 +145,12 @@ export default function Auth() {
 
           {error && <div className="au-alert" role="alert">{error}</div>}
           {info && <div className="au-alert success" role="status">{info}</div>}
+
+          <button type="button" className="au-demo" onClick={continueAsDemo}>
+            <i className="ti ti-sparkles" style={{ fontSize: 14 }} aria-hidden="true" />
+            Continue as demo user — no sign-up needed
+          </button>
+          <div className="au-demo-sub">Explore every feature with a pre-built profile.</div>
 
           <button type="button" className="au-google" onClick={handleGoogle}>
             <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
