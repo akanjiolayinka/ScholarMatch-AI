@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import authRoutes from './routes/auth.js'
 import matchingRoutes from './routes/matching.js'
+import draftsRoutes from './routes/drafts.js'
 
 const app = express()
 
@@ -13,6 +14,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/matching', matchingRoutes)
+app.use('/api/drafts', draftsRoutes)
 
 const port = process.env.PORT || 3001
 app.listen(port, () => {

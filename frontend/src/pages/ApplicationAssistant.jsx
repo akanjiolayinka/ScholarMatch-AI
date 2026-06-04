@@ -10,7 +10,14 @@ import {
   buildCoverLetter,
   wordCount,
 } from '../lib/drafts'
+import { streamDraft } from '../lib/draftsApi'
+import { useSession } from '../lib/useSession'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import './ApplicationAssistant.css'
+
+// Map the editor tab key to the backend `type` param. The server persists
+// drafts under these same keys on applications.documents.
+const TYPE_BY_TAB = { ps: 'ps', cv: 'cv', cl: 'cover_letter' }
 
 const TABS = [
   { key: 'ps', label: 'Personal statement', icon: 'ti-pencil', rec: '500–650 words' },
@@ -26,6 +33,7 @@ function orgInitials(org) {
 export default function ApplicationAssistant() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useSession()
   const scholarship = getScholarship(id)
   const [tab, setTab] = useState('ps')
   const [doneTabs, setDoneTabs] = useState(() => new Set(['cv']))
@@ -36,6 +44,11 @@ export default function ApplicationAssistant() {
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const [docs, setDocs] = useState([])
+  // Streamed documents, keyed by tab. When present, the editor renders these
+  // instead of the static seed sections.
+  const [streamed, setStreamed] = useState({}) // { ps: string, cv: string, cover_letter: string }
+  const [generating, setGenerating] = useState(false)
+  const cancelStreamRef = useRef(null)
   const chatRef = useRef(null)
   const inputRef = useRef(null)
   const fileRef = useRef(null)
@@ -91,6 +104,79 @@ export default function ApplicationAssistant() {
       handleSend()
     }
   }
+
+  function generate() {
+    const type = TYPE_BY_TAB[tab]
+    if (!type || !scholarship) return
+    if (!isSupabaseConfigured) {
+      // No backend wired in demo mode — show a friendly note in the chat.
+      sendMessage('Live generation needs the API + Groq key configured. Showing the static draft.')
+      return
+    }
+    setGenerating(true)
+    setStreamed((s) => ({ ...s, [type]: '' }))
+    cancelStreamRef.current?.()
+    streamDraft(
+      { type, scholarshipId: scholarship.id },
+      {
+        onChunk: (_chunk, full) => setStreamed((s) => ({ ...s, [type]: full })),
+        onDone: () => setGenerating(false),
+        onError: (err) => {
+          setGenerating(false)
+          setChat((c) => [...c, { role: 'ai', text: `Couldn't reach the writing model: ${err.message}` }])
+        },
+      },
+    ).then((cancel) => { cancelStreamRef.current = cancel })
+  }
+
+  function refineSelection(instruction) {
+    if (!isSupabaseConfigured) {
+      sendMessage(instruction)
+      return
+    }
+    const type = TYPE_BY_TAB[tab]
+    const selection = streamed[type] || sectionsToPlain(sections)
+    setChat((c) => [...c, { role: 'user', text: instruction }])
+    setTyping(true)
+    let buf = ''
+    streamDraft(
+      { type: 'refine', scholarshipId: scholarship.id, instruction, selection },
+      {
+        onChunk: (chunk) => { buf += chunk },
+        onDone: (full) => {
+          setTyping(false)
+          setStreamed((s) => ({ ...s, [type]: full || buf }))
+          setChat((c) => [...c, { role: 'ai', text: 'Updated. The new version is in the editor.' }])
+        },
+        onError: (err) => {
+          setTyping(false)
+          setChat((c) => [...c, { role: 'ai', text: `Refine failed: ${err.message}` }])
+        },
+      },
+    )
+  }
+
+  // Cancel any in-flight stream on unmount or tab change.
+  useEffect(() => () => cancelStreamRef.current?.(), [])
+  useEffect(() => () => cancelStreamRef.current?.(), [tab])
+
+  // Load persisted documents from previous sessions on first mount.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!user?.id || !isSupabaseConfigured || !scholarship) return
+      const { data } = await supabase
+        .from('applications')
+        .select('documents')
+        .eq('user_id', user.id)
+        .eq('scholarship_id', scholarship.id)
+        .maybeSingle()
+      if (cancelled || !data?.documents) return
+      setStreamed(data.documents)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user, scholarship])
 
   function markReady() {
     setDoneTabs((s) => new Set([...s, tab]))
@@ -182,11 +268,14 @@ export default function ApplicationAssistant() {
                 <button className="aa-tool-btn" title="Bulleted list"><i className="ti ti-list" style={{ fontSize: 12 }} aria-hidden="true" /></button>
                 <button className="aa-tool-btn" title="Numbered list"><i className="ti ti-list-numbers" style={{ fontSize: 12 }} aria-hidden="true" /></button>
                 <div className="aa-tool-sep" />
-                <button className="aa-tool-btn ai" onClick={() => sendMessage('AI improve this section')}>
+                <button className="aa-tool-btn ai" onClick={() => refineSelection('Make this section sharper and more vivid')}>
                   <i className="ti ti-sparkles" style={{ fontSize: 11 }} aria-hidden="true" /> AI improve
                 </button>
-                <button className="aa-tool-btn" onClick={() => sendMessage('Rephrase the selected paragraph')}>
+                <button className="aa-tool-btn" onClick={() => refineSelection('Rephrase this passage while keeping the meaning')}>
                   <i className="ti ti-arrows-left-right" style={{ fontSize: 11 }} aria-hidden="true" /> Rephrase
+                </button>
+                <button className="aa-tool-btn ai" onClick={generate} disabled={generating}>
+                  <i className="ti ti-bolt" style={{ fontSize: 11 }} aria-hidden="true" /> {generating ? 'Generating…' : 'Regenerate'}
                 </button>
                 <div className="aa-tool-sep" />
                 <button className="aa-tool-btn" title="Copy"><i className="ti ti-copy" style={{ fontSize: 12 }} aria-hidden="true" /></button>
@@ -194,21 +283,41 @@ export default function ApplicationAssistant() {
               </div>
 
               <div className="aa-doc">
-                {sections.map((sec) => (
-                  <div className="aa-doc-section" key={sec.title}>
-                    <div className="aa-doc-section-title">
-                      {sec.title}
-                      {sec.ai && <span className="aa-ai-tag">AI drafted</span>}
-                    </div>
-                    {sec.paragraphs.map((p, i) => <Paragraph key={i} p={p} />)}
-                  </div>
-                ))}
-                {tab === 'ps' && (
-                  <div className="aa-highlight-hint">
-                    <i className="ti ti-bulb" style={{ fontSize: 14 }} aria-hidden="true" />
-                    Scholar suggests personalising the highlighted sections — add a specific story only you can tell.
-                  </div>
-                )}
+                {(() => {
+                  const streamedText = streamed[TYPE_BY_TAB[tab]]
+                  if (streamedText) {
+                    return (
+                      <div className="aa-doc-section">
+                        <div className="aa-doc-section-title">
+                          {TABS.find((t) => t.key === tab)?.label}
+                          <span className="aa-ai-tag">AI {generating ? 'drafting…' : 'drafted'}</span>
+                        </div>
+                        {streamedText.split(/\n\n+/).map((para, i) => (
+                          <p key={i} style={{ whiteSpace: 'pre-wrap' }}>{para}{generating && i === streamedText.split(/\n\n+/).length - 1 ? '▍' : ''}</p>
+                        ))}
+                      </div>
+                    )
+                  }
+                  return (
+                    <>
+                      {sections.map((sec) => (
+                        <div className="aa-doc-section" key={sec.title}>
+                          <div className="aa-doc-section-title">
+                            {sec.title}
+                            {sec.ai && <span className="aa-ai-tag">AI drafted</span>}
+                          </div>
+                          {sec.paragraphs.map((p, i) => <Paragraph key={i} p={p} />)}
+                        </div>
+                      ))}
+                      {tab === 'ps' && (
+                        <div className="aa-highlight-hint">
+                          <i className="ti ti-bulb" style={{ fontSize: 14 }} aria-hidden="true" />
+                          Scholar suggests personalising the highlighted sections — add a specific story only you can tell.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
               <div className="aa-editor-footer">
@@ -265,7 +374,7 @@ export default function ApplicationAssistant() {
             <div className="aa-qa-label">Quick actions</div>
             <div className="aa-qa-chips">
               {QUICK_ACTIONS.map((q) => (
-                <button key={q} className="aa-qa-chip" onClick={() => sendMessage(q)}>{q}</button>
+                <button key={q} className="aa-qa-chip" onClick={() => isSupabaseConfigured ? refineSelection(q) : sendMessage(q)}>{q}</button>
               ))}
             </div>
           </div>
@@ -289,6 +398,15 @@ export default function ApplicationAssistant() {
       </div>
     </div>
   )
+}
+
+function sectionsToPlain(sections) {
+  return sections.map((sec) => sec.paragraphs.map((p) => {
+    if (typeof p === 'string') return p
+    if (p.html) return p.html.replace(/<[^>]+>/g, '')
+    if (p.parts) return p.parts.map((x) => x.text).join('')
+    return ''
+  }).join('\n\n')).join('\n\n')
 }
 
 function Paragraph({ p }) {
