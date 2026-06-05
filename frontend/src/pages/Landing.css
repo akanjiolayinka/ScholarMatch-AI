@@ -13,7 +13,7 @@
 .sm-mobile-menu { display: none; }
 
 /* ---------- hero ---------- */
-.sm-hero { position: relative; background: #0A0E2A; color: #fff; padding: 96px 32px 80px; text-align: center; overflow: hidden; isolation: isolate; }
+.sm-hero { position: relative; background: #0A0E2A; color: #fff; padding: 96px 32px 80px; text-align: center; overflow: hidden; }
 .sm-hero::before { content: ''; position: absolute; inset: 0; background:
   radial-gradient(ellipse 600px 320px at 50% 0%, rgba(245,166,35,0.10), transparent 70%),
   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><circle cx='1' cy='1' r='1' fill='rgba(255,255,255,0.05)'/></svg>");
@@ -21,7 +21,7 @@
 }
 .sm-hero-blob-1 { position: absolute; top: -160px; right: -160px; width: 420px; height: 420px; border-radius: 50%; background: #F5A623; filter: blur(80px); opacity: 0.12; z-index: 0; pointer-events: none; }
 .sm-hero-blob-2 { position: absolute; bottom: -180px; left: -160px; width: 420px; height: 420px; border-radius: 50%; background: #3B82F6; filter: blur(80px); opacity: 0.10; z-index: 0; pointer-events: none; }
-.sm-hero > * { position: relative; z-index: 1; }
+.sm-hero-inner { position: relative; z-index: 2; max-width: 800px; margin: 0 auto; }
 
 .sm-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(245,166,35,0.16); color: #FAEEDA; font-size: 12px; font-weight: 500; padding: 6px 14px; border-radius: 20px; margin-bottom: 24px; border: 1px solid rgba(245,166,35,0.32); }
 .sm-h1 { font-family: 'Sora', sans-serif; font-size: 48px; font-weight: 700; line-height: 1.15; max-width: 720px; margin: 0 auto 16px; color: #fff; letter-spacing: -0.02em; }
@@ -81,6 +81,25 @@
 .sm-feature-desc { font-size: 13px; color: var(--color-text-secondary); line-height: 1.7; }
 
 .sm-grad-divider { height: 1px; background: linear-gradient(to right, transparent, rgba(10,14,42,0.12), transparent); }
+
+/* ---------- background features (dark navy) ---------- */
+.sm-bg-features { background: #0A0E2A; color: #fff; padding: 80px 32px; position: relative; overflow: hidden; }
+.sm-bg-features::before { content: ''; position: absolute; inset: 0; background:
+  radial-gradient(ellipse 540px 280px at 80% 0%, rgba(245,166,35,0.08), transparent 70%),
+  radial-gradient(ellipse 480px 280px at 0% 100%, rgba(59,130,246,0.08), transparent 70%);
+  pointer-events: none;
+}
+.sm-bg-inner { position: relative; max-width: 1100px; margin: 0 auto; }
+.sm-bg-title { color: #fff; }
+.sm-bg-sub { color: rgba(255,255,255,0.65); margin-bottom: 36px; }
+.sm-bg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.sm-bg-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; padding: 22px; backdrop-filter: blur(12px); transition: transform 0.2s, border-color 0.2s, background 0.2s; }
+.sm-bg-card:hover { transform: translateY(-3px); background: rgba(255,255,255,0.06); border-color: rgba(245,166,35,0.30); }
+.sm-bg-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+.sm-bg-card-title { font-family: 'Sora', sans-serif; font-size: 17px; font-weight: 600; margin-bottom: 8px; color: #fff; }
+.sm-bg-card-desc { font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.7; margin-bottom: 14px; }
+.sm-bg-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; background: rgba(245,166,35,0.16); color: #F5A623; border: 1px solid rgba(245,166,35,0.32); }
+@media (max-width: 760px) { .sm-bg-grid { grid-template-columns: 1fr; } }
 
 /* ---------- how ---------- */
 .sm-how { padding: 80px 32px; background: #0A0E2A; color: #fff; position: relative; overflow: hidden; }

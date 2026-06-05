@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 
+// Same-origin in production; configurable for split deployments.
 const API_URL = import.meta.env.VITE_API_URL || ''
 
 // Stream a draft generation. Uses fetch + ReadableStream rather than the
@@ -10,10 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 // onDone(fullText)
 // onError(err)
 export async function streamDraft({ type, scholarshipId, instruction, selection }, { onChunk, onDone, onError } = {}) {
-  if (!API_URL) {
-    onError?.(new Error('VITE_API_URL not configured'))
-    return () => {}
-  }
+  // Empty API_URL is fine in production — same-origin /api/drafts/generate.
   const controller = new AbortController()
   let token = null
   if (supabase) {

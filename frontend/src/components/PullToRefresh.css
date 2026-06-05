@@ -1,0 +1,4 @@
+.ptr-indicator { position: fixed; top: 0; left: 50%; transform: translate(-50%, 0); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; z-index: 30; pointer-events: none; }
+.ptr-spinner { width: 36px; height: 36px; background: #fff; border-radius: 50%; box-shadow: 0 2px 12px rgba(10,14,42,0.18); display: flex; align-items: center; justify-content: center; color: #F5A623; }
+.ptr-spinner.spin i { animation: ptrSpin 0.8s linear infinite; }
+@keyframes ptrSpin { to { transform: rotate(360deg); } }

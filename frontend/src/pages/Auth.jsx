@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useSession } from '../lib/useSession'
-import { setMockSession } from '../lib/mockAuth'
+import {
+  isMockMode,
+  signUpMock,
+  logInMock,
+  getMockUser,
+  isOnboardingComplete,
+} from '../lib/mockAuth'
 import { useToast } from '../components/Toast'
 import Logo from '../components/Logo'
 import './Auth.css'
@@ -11,99 +16,65 @@ export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
   const { session, loading: sessionLoading } = useSession()
-  const redirectTo = location.state?.from || '/dashboard'
+  const redirectTo = location.state?.from || (isOnboardingComplete() ? '/dashboard' : '/onboarding')
+  const toast = useToast()
 
   useEffect(() => {
     if (!sessionLoading && session) navigate(redirectTo, { replace: true })
   }, [sessionLoading, session, navigate, redirectTo])
 
-  const toast = useToast()
-  const [mode, setMode] = useState('signup') // 'signup' | 'login'
-
-  function continueAsDemo() {
-    setMockSession(true)
-    toast.push('Welcome, Temi! Loading your demo profile…', 'success')
-    navigate('/onboarding', { replace: true })
-  }
+  const [mode, setMode] = useState('signup')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
 
   const isSignup = mode === 'signup'
 
   function switchMode(next) {
     setMode(next)
     setError('')
-    setInfo('')
   }
 
-  async function handleGoogle() {
-    setError('')
-    if (!isSupabaseConfigured) {
-      setError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/onboarding` },
-    })
-    if (error) setError(error.message)
+  function validate() {
+    if (isSignup && !name.trim()) return 'Please enter your full name.'
+    if (!email.trim() || !email.includes('@')) return 'Please enter a valid email address.'
+    if (isSignup && password.length < 8) return 'Password must be at least 8 characters.'
+    if (!password) return 'Please enter your password.'
+    return null
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    const err = validate()
+    if (err) { setError(err); return }
     setError('')
-    setInfo('')
-
-    if (!isSupabaseConfigured) {
-      setError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-    if (isSignup && !name.trim()) {
-      setError('Please enter your full name.')
-      return
-    }
-
     setLoading(true)
-    try {
-      if (isSignup) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: name.trim() },
-            emailRedirectTo: `${window.location.origin}/onboarding`,
-          },
-        })
-        if (error) throw error
-        if (data.session) navigate('/onboarding')
-        else setInfo("Check your email to confirm your account, then come back to log in.")
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-        navigate(redirectTo)
-      }
-    } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  async function handleForgot() {
-    if (!email) {
-      setError('Enter your email first, then click Forgot password.')
-      return
+    if (isSignup) {
+      // Mock signup: store user + start session, then send to onboarding.
+      await wait(1000)
+      signUpMock(name.trim(), email.trim())
+      toast.push('Account created. Let\'s build your profile.', 'success')
+      navigate('/onboarding', { replace: true })
+    } else {
+      await wait(800)
+      const existing = getMockUser()
+      if (!existing) {
+        setLoading(false)
+        toast.push('No account found. Sign up first.', 'error')
+        return
+      }
+      const user = logInMock(email.trim())
+      if (!user) {
+        setLoading(false)
+        toast.push('Email doesn\'t match the account on this device.', 'error')
+        return
+      }
+      toast.push(`Welcome back, ${user.name.split(' ')[0]}!`, 'success')
+      navigate(isOnboardingComplete() ? '/dashboard' : '/onboarding', { replace: true })
     }
-    setError('')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
-    })
-    if (error) setError(error.message)
-    else setInfo('Password reset link sent. Check your email.')
   }
 
   return (
@@ -144,25 +115,6 @@ export default function Auth() {
           <div className="au-sub">{isSignup ? 'Start finding scholarships in 5 minutes' : 'Your matches are waiting'}</div>
 
           {error && <div className="au-alert" role="alert">{error}</div>}
-          {info && <div className="au-alert success" role="status">{info}</div>}
-
-          <button type="button" className="au-demo" onClick={continueAsDemo}>
-            <i className="ti ti-sparkles" style={{ fontSize: 14 }} aria-hidden="true" />
-            Continue as demo user — no sign-up needed
-          </button>
-          <div className="au-demo-sub">Explore every feature with a pre-built profile.</div>
-
-          <button type="button" className="au-google" onClick={handleGoogle}>
-            <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
-              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
-              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.87-3.04.87-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 009 18z"/>
-              <path fill="#FBBC05" d="M3.97 10.73a5.4 5.4 0 010-3.46V4.93H.96a9 9 0 000 8.14l3.01-2.34z"/>
-              <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.34l2.58-2.58A9 9 0 009 0a9 9 0 00-8.04 4.93l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          <div className="au-divider"><span>or</span></div>
 
           <form onSubmit={handleSubmit} noValidate>
             {isSignup && (
@@ -176,24 +128,29 @@ export default function Auth() {
               <input id="au-email" className="au-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="au-field">
-              <div className="au-field-row">
-                <label className="au-label" htmlFor="au-password">Password</label>
-                {!isSignup && (
-                  <button type="button" className="au-forgot" onClick={handleForgot}>Forgot password?</button>
-                )}
-              </div>
-              <input id="au-password" className="au-input" type="password" autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+              <label className="au-label" htmlFor="au-password">Password</label>
+              <input
+                id="au-password"
+                className="au-input"
+                type="password"
+                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={isSignup ? 8 : 1}
+                required
+                placeholder={isSignup ? 'At least 8 characters' : ''}
+              />
             </div>
 
             <button type="submit" className="au-submit" disabled={loading}>
               {loading && <span className="au-spinner" aria-hidden="true" />}
-              {isSignup ? 'Create account' : 'Log in'}
+              {loading ? (isSignup ? 'Creating account…' : 'Logging in…') : (isSignup ? 'Create account' : 'Log in')}
             </button>
           </form>
 
-          {isSignup && (
+          {isMockMode() && (
             <div className="au-legal">
-              By signing up, you agree to our <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>.
+              Demo mode — your account stays on this device. No emails sent.
             </div>
           )}
 
@@ -209,3 +166,5 @@ export default function Auth() {
     </div>
   )
 }
+
+function wait(ms) { return new Promise((r) => setTimeout(r, ms)) }

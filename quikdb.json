@@ -1,0 +1,15 @@
+{
+  "name": "scholarmatch-ai",
+  "runtime": "nodejs",
+  "install": "npm run install:all",
+  "build": "npm run build",
+  "start": "npm start",
+  "port": 3001,
+  "env": [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GROQ_API_KEY",
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_ANON_KEY"
+  ]
+}

@@ -15,7 +15,10 @@ import { useSession } from '../lib/useSession'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { isMockMode, hasMockSession } from '../lib/mockAuth'
-import { buildMockPS, buildMockCV, buildMockCover } from '../lib/mockData'
+import { buildMockPS, buildMockCV, buildMockCover, MOCK_PROFILE } from '../lib/mockData'
+import { getMockProfile } from '../lib/mockAuth'
+import ScholarshipPanel from '../components/ScholarshipPanel'
+import RefreshButton from '../components/RefreshButton'
 import './ApplicationAssistant.css'
 
 // Map the editor tab key to the backend `type` param. The server persists
@@ -57,6 +60,7 @@ export default function ApplicationAssistant() {
     cover_letter: buildMockCover(scholarship),
   } : {})
   const [generating, setGenerating] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(null) // null | 'overview' | 'why'
   const cancelStreamRef = useRef(null)
   const chatRef = useRef(null)
   const inputRef = useRef(null)
@@ -276,9 +280,12 @@ export default function ApplicationAssistant() {
                 </div>
               </div>
             </div>
-            <button className="aa-btn-outline" style={{ fontSize: 11 }}>
-              <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" /> View requirements
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <RefreshButton onRefresh={() => toast.push('Draft refreshed', 'success')} />
+              <button className="aa-btn-outline" style={{ fontSize: 11 }} onClick={() => setPanelOpen('overview')}>
+                <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" /> View requirements
+              </button>
+            </div>
           </div>
 
           <div className="aa-doc-tabs" role="tablist">
@@ -439,6 +446,17 @@ export default function ApplicationAssistant() {
           </div>
         </aside>
       </div>
+
+      {panelOpen && (
+        <ScholarshipPanel
+          scholarship={scholarship}
+          profile={getMockProfile() || MOCK_PROFILE}
+          scrollToSection={panelOpen === 'why' ? 'why' : undefined}
+          onClose={() => setPanelOpen(null)}
+          onApply={() => setPanelOpen(null)}
+          onAddToTracker={() => { toast.push('Added to tracker', 'success'); setPanelOpen(null) }}
+        />
+      )}
     </div>
   )
 }

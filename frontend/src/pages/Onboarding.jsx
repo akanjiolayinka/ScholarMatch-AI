@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import Logo from '../components/Logo'
-import { isSupabaseConfigured } from '../lib/supabase'
 import { useSession } from '../lib/useSession'
+import { useToast } from '../components/Toast'
+import {
+  getMockUser,
+  isOnboardingComplete,
+  markOnboardingComplete,
+  isMockMode,
+} from '../lib/mockAuth'
 import { upsertProfile, setUserName, parseStudies, parseGpa } from '../lib/profileApi'
+import { isSupabaseConfigured } from '../lib/supabase'
 import './Onboarding.css'
 
 const STEPS = [
@@ -12,73 +19,71 @@ const STEPS = [
   { key: 'goals', label: 'Goals' },
   { key: 'background', label: 'Background' },
   { key: 'finances', label: 'Finances' },
-  { key: 'documents', label: 'Documents' },
+  { key: 'wrap', label: 'Wrap up' },
 ]
 
-// Each question may include chips. `key` stores the answer on the profile.
-// `step` maps to STEPS index. `parse` extracts structured fields from text.
-const QUESTIONS = [
-  {
-    key: 'name',
-    step: 0,
-    ai: "Welcome! I'm Scholar — your personal scholarship guide. I'll ask you a series of questions to understand your background and what you're looking for. Then I'll match you to every scholarship you actually qualify for.\n\nThis takes about 5 minutes. Let's start — what's your full name?",
-  },
-  {
-    key: 'nationality',
-    step: 0,
-    ai: (p) => `Nice to meet you, ${firstName(p.name) || 'there'}! And what's your nationality? If you hold dual citizenship, mention both — it opens more options.`,
-  },
-  {
-    key: 'studies',
-    step: 1,
-    ai: (p) => `Great — being ${p.nationality || 'where you are'} opens up a solid range of both local and international scholarships. What are you currently studying? Tell me your degree, your university, and what year or level you're in.`,
-  },
-  {
-    key: 'gpa',
-    step: 1,
-    ai: "What's your current GPA or grade? Let me know whether it's out of 4.0 or 5.0 — or just describe your performance (first class, second class upper, etc.).",
-  },
-  {
-    key: 'field',
-    step: 1,
-    ai: (p) => `Within ${p.studies ? shortDegree(p.studies) : 'your degree'}, what specific area interests you most? For example — software, hardware, AI, networks? This helps me find field-specific scholarships.`,
-  },
-  {
-    key: 'goal',
-    step: 2,
-    ai: 'Are you primarily looking to fund your current undergraduate degree, or are you planning for postgraduate abroad?',
-    chips: ['Fund my current degree', 'Study abroad for masters', 'Study abroad for PhD', "Not sure yet — show me everything"],
-  },
-  {
-    key: 'destinations',
-    step: 2,
-    ai: 'Which countries are you most open to studying in? Pick as many as you like.',
-    chips: ['UK', 'USA', 'Germany', 'Canada', 'Netherlands', 'France', 'Australia', 'Nigeria only', 'Open to anywhere'],
-    multi: true,
-  },
-  {
-    key: 'needBased',
-    step: 4,
-    ai: 'Some scholarships prioritise students with demonstrated financial need — they often have less competition too. Would you like me to include those in your matches?',
-    chips: ['Yes, include them', 'No, merit-based only', 'Not sure'],
-  },
-  {
-    key: 'extras',
-    step: 3,
-    ai: 'Tell me a bit about yourself beyond academics. Any leadership roles, clubs, projects, volunteer work, or competitions? Even small things count.',
-  },
-  {
-    key: 'languages',
-    step: 3,
-    ai: 'Last one — what languages do you speak? English is assumed, so mention any others.',
-  },
-]
-
-const TOTAL_Q = QUESTIONS.length
+// Each question is keyed by its target profile field. `step` indexes STEPS.
+// `chips` / `multi` drive the quick-reply UI; `ai` is a string or a function
+// of the in-progress profile.
+function buildQuestions(signupName) {
+  const greetingName = signupName ? signupName.split(' ')[0] : 'there'
+  return [
+    {
+      key: 'name', step: 0,
+      ai: `Hi ${greetingName}! I'm Scholar, your personal scholarship guide. I'll ask you a few quick questions to find scholarships you actually qualify for.\n\nLet's start — what should I call you? (You can use a nickname if you prefer.)`,
+    },
+    {
+      key: 'nationality', step: 0,
+      ai: (p) => `Nice to meet you, ${firstName(p.name) || greetingName}! What's your nationality? If you hold dual citizenship, mention both — it opens more options.`,
+      chips: ['Nigerian', 'Ghanaian', 'Kenyan', 'South African', 'Other African', 'Non-African'],
+    },
+    {
+      key: 'studies', step: 1,
+      ai: "What are you currently studying? Tell me your degree, your university, and what year or level you're in.",
+    },
+    {
+      key: 'gpa', step: 1,
+      ai: "What's your current GPA or grade? Let me know if it's out of 4.0 or 5.0 — or just tell me your class (First Class, 2:1, etc.)",
+    },
+    {
+      key: 'field', step: 1,
+      ai: (p) => `Within ${p.studies ? shortDegree(p.studies) : 'your degree'}, what area interests you most? For example — software, AI, finance, public health, law. This helps me find field-specific scholarships.`,
+    },
+    {
+      key: 'goal', step: 2,
+      ai: 'Are you primarily looking to fund your current degree, or are you planning for postgraduate study abroad?',
+      chips: [
+        'Fund my current undergraduate degree',
+        'Study abroad for a Masters',
+        'Study abroad for a PhD',
+        'Not sure yet — show me everything',
+      ],
+    },
+    {
+      key: 'destinations', step: 2,
+      ai: 'Which countries are you most open to studying in? Pick as many as you like.',
+      chips: ['UK', 'USA', 'Germany', 'Canada', 'Netherlands', 'France', 'Australia', 'Nigeria only', 'Open to anywhere'],
+      multi: true,
+    },
+    {
+      key: 'needBased', step: 4,
+      ai: 'Some scholarships specifically support students with financial need — they often have less competition too. Would you like me to include those in your matches?',
+      chips: ['Yes, include them', 'No, merit-based only', 'Not sure'],
+    },
+    {
+      key: 'extras', step: 3,
+      ai: 'Tell me a bit about yourself beyond academics. Any leadership roles, clubs, projects, competitions, or volunteer work? Even small things count — they open up leadership-focused scholarships.',
+    },
+    {
+      key: 'languages', step: 3,
+      ai: 'Last one — what languages do you speak? English is assumed, so just mention any others.',
+    },
+  ]
+}
 
 function firstName(name) {
   if (!name) return ''
-  return name.trim().split(/\s+/)[0]
+  return String(name).trim().split(/\s+/)[0]
 }
 
 function shortDegree(text) {
@@ -92,59 +97,60 @@ function shortDegree(text) {
   return 'your degree'
 }
 
-function progressPct(answered) {
-  // Each answered question contributes ~16% (6 sections), capped per step ratio
-  return Math.min(100, Math.round((answered / TOTAL_Q) * 100))
-}
-
-function activeStepIndex(answered) {
-  if (answered >= TOTAL_Q) return STEPS.length - 1
-  const q = QUESTIONS[answered]
-  return q ? q.step : 0
-}
-
-function aiText(q, profile) {
-  return typeof q.ai === 'function' ? q.ai(profile) : q.ai
-}
-
-// Map an in-memory question key to the matching `public.profiles` columns.
-// Returns an object that can be passed directly to upsertProfile.
+// Map a profile shape (keyed by question keys) → the Supabase profiles row.
 function profilePatchFor(key, value) {
   switch (key) {
-    case 'name':
-      return null // handled separately (writes to users.name)
-    case 'nationality':
-      return { nationality: value }
-    case 'studies':
-      return parseStudies(value)
-    case 'gpa':
-      return parseGpa(value)
-    case 'field':
-      return { field: value }
-    case 'goal':
-      return { goal: value }
-    case 'destinations':
-      return { destinations: Array.isArray(value) ? value : [value] }
-    case 'needBased':
-      return { need_based: /^yes/i.test(String(value)) }
-    case 'extras':
-      return { extras: value }
-    case 'languages':
-      return { languages: String(value).split(/[,;]+/).map((s) => s.trim()).filter(Boolean) }
-    default:
-      return null
+    case 'name': return null
+    case 'nationality': return { nationality: value }
+    case 'studies': return parseStudies(value)
+    case 'gpa': return parseGpa(value)
+    case 'field': return { field: value }
+    case 'goal': return { goal: value }
+    case 'destinations': return { destinations: Array.isArray(value) ? value : [value] }
+    case 'needBased': return { need_based: /^yes/i.test(String(value)) }
+    case 'extras': return { extras: value }
+    case 'languages': return { languages: String(value).split(/[,;]+/).map((s) => s.trim()).filter(Boolean) }
+    default: return null
+  }
+}
+
+// Mock-mode profile shape persisted to localStorage as sm_mock_profile.
+function profileToStorageShape(profile, signupUser) {
+  return {
+    name: profile.name || signupUser?.name || '',
+    email: signupUser?.email || '',
+    nationality: profile.nationality || '',
+    studies: profile.studies || '',
+    university: parseStudies(profile.studies || '').university || '',
+    degree: parseStudies(profile.studies || '').degree || profile.studies || '',
+    level: parseStudies(profile.studies || '').level || '',
+    gpa: parseGpa(profile.gpa || '').gpa || '',
+    gpaScale: parseGpa(profile.gpa || '').gpa_scale || 5,
+    field: profile.field || '',
+    goal: profile.goal || '',
+    destinations: Array.isArray(profile.destinations) ? profile.destinations : (profile.destinations ? [profile.destinations] : []),
+    needBased: /^yes/i.test(String(profile.needBased || '')),
+    extras: profile.extras || '',
+    languages: profile.languages || '',
+    newMatches: true,
+    deadlines: true,
+    weeklyDigest: false,
   }
 }
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const toast = useToast()
   const { user } = useSession()
   const bodyRef = useRef(null)
   const inputRef = useRef(null)
 
-  // messages: { role: 'ai'|'user', text, chips?, multi?, qKey?, locked? }
+  // Pull the signup name so Scholar can greet by name from message 1.
+  const signupUser = (isMockMode() || !user?.email) ? getMockUser() : user
+  const QUESTIONS = useRef(buildQuestions(signupUser?.name || user?.user_metadata?.full_name || '')).current
+
   const [messages, setMessages] = useState(() => [
-    { role: 'ai', text: aiText(QUESTIONS[0], {}), qKey: QUESTIONS[0].key },
+    { role: 'ai', text: typeof QUESTIONS[0].ai === 'string' ? QUESTIONS[0].ai : QUESTIONS[0].ai({}), qKey: QUESTIONS[0].key },
   ])
   const [profile, setProfile] = useState({})
   const [draft, setDraft] = useState('')
@@ -152,9 +158,15 @@ export default function Onboarding() {
   const [multiSelection, setMultiSelection] = useState([])
   const [finished, setFinished] = useState(false)
 
+  // Already onboarded? Don't re-run the flow — push straight to dashboard.
+  useEffect(() => {
+    if (isOnboardingComplete()) navigate('/dashboard', { replace: true })
+  }, [navigate])
+
   const answered = Object.keys(profile).length
-  const pct = finished ? 100 : progressPct(answered)
-  const stepIdx = activeStepIndex(answered)
+  const TOTAL_Q = QUESTIONS.length
+  const pct = finished ? 100 : Math.min(100, Math.round((answered / TOTAL_Q) * 100))
+  const stepIdx = answered >= TOTAL_Q ? STEPS.length - 1 : (QUESTIONS[answered]?.step ?? 0)
 
   useEffect(() => {
     const el = bodyRef.current
@@ -169,25 +181,47 @@ export default function Onboarding() {
     el.style.height = Math.min(el.scrollHeight, 140) + 'px'
   }
 
-  function pushUser(text) {
-    setMessages((m) => [...m, { role: 'user', text }])
-  }
-
-  function pushAi(text, extras = {}) {
-    setMessages((m) => [...m, { role: 'ai', text, ...extras }])
-  }
+  function pushUser(text) { setMessages((m) => [...m, { role: 'user', text }]) }
+  function pushAi(text, extras = {}) { setMessages((m) => [...m, { role: 'ai', text, ...extras }]) }
 
   function lockLastChips() {
     setMessages((m) => {
       const next = [...m]
       for (let i = next.length - 1; i >= 0; i--) {
-        if (next[i].chips && !next[i].locked) {
-          next[i] = { ...next[i], locked: true }
-          break
-        }
+        if (next[i].chips && !next[i].locked) { next[i] = { ...next[i], locked: true }; break }
       }
       return next
     })
+  }
+
+  async function finish(nextProfile) {
+    const name = firstName(nextProfile.name) || firstName(signupUser?.name) || 'there'
+    pushAi(`Perfect, ${name} — I have everything I need. Here's your profile.`, { snapshot: nextProfile })
+    await wait(900)
+    pushAi(`I'm scanning 2,400+ scholarships against your profile now...`)
+    await wait(1500)
+    const matches = 40 + Math.floor(Math.random() * 141) // 40–180
+    pushAi(`Done! I found ${matches} scholarships that fit your profile. Let's go see them. 🎓`, {
+      cta: { label: 'See my matches', to: '/dashboard' },
+    })
+
+    // Persist mock profile + flip the onboarding flag so the dashboard is unblocked.
+    const stored = profileToStorageShape(nextProfile, signupUser)
+    markOnboardingComplete(stored)
+
+    // If a real Supabase user is signed in, also persist upstream.
+    if (!isMockMode() && isSupabaseConfigured && user?.id) {
+      if (nextProfile.name) setUserName(user.id, nextProfile.name)
+      const patches = ['nationality', 'studies', 'gpa', 'field', 'goal', 'destinations', 'needBased', 'extras', 'languages']
+      for (const k of patches) {
+        const patch = profilePatchFor(k, nextProfile[k])
+        if (patch) upsertProfile(user.id, patch)
+      }
+    }
+
+    setFinished(true)
+    toast.push(`Welcome aboard, ${name}!`, 'success')
+    window.setTimeout(() => navigate('/dashboard'), 2400)
   }
 
   async function advance(answerText, value) {
@@ -202,17 +236,6 @@ export default function Onboarding() {
     const nextProfile = { ...profile, [currentQ.key]: finalValue }
     setProfile(nextProfile)
 
-    // Persist immediately so the user can leave mid-onboarding and pick up
-    // exactly where they were.
-    if (user?.id) {
-      if (currentQ.key === 'name') {
-        setUserName(user.id, finalValue)
-      } else {
-        const patch = profilePatchFor(currentQ.key, finalValue)
-        if (patch) upsertProfile(user.id, patch)
-      }
-    }
-
     const nextIdx = currentIdx + 1
     setTyping(true)
     await wait(900 + Math.random() * 400)
@@ -220,27 +243,11 @@ export default function Onboarding() {
 
     if (nextIdx < QUESTIONS.length) {
       const nextQ = QUESTIONS[nextIdx]
-      pushAi(aiText(nextQ, nextProfile), {
-        qKey: nextQ.key,
-        chips: nextQ.chips,
-        multi: nextQ.multi,
-      })
+      const text = typeof nextQ.ai === 'function' ? nextQ.ai(nextProfile) : nextQ.ai
+      pushAi(text, { qKey: nextQ.key, chips: nextQ.chips, multi: nextQ.multi })
       setMultiSelection([])
     } else {
-      // Completion sequence
-      const name = firstName(nextProfile.name) || 'there'
-      pushAi(`Perfect, ${name} — I have everything I need. Here's your profile snapshot.`, { snapshot: nextProfile })
-      await wait(1400)
-      setTyping(true)
-      await wait(1600)
-      setTyping(false)
-      const matches = 200 + Math.floor(Math.random() * 80)
-      pushAi(`Done. I found ${matches} scholarships that match your profile. Let's go see them.`, {
-        cta: { label: 'See my matches', to: '/dashboard' },
-      })
-      setFinished(true)
-      // Auto-redirect after a beat
-      window.setTimeout(() => navigate('/dashboard'), 2400)
+      await finish(nextProfile)
     }
   }
 
@@ -264,15 +271,11 @@ export default function Onboarding() {
 
   function handleMultiConfirm() {
     if (multiSelection.length === 0 || typing || finished) return
-    const text = multiSelection.join(', ')
-    advance(text, multiSelection.slice())
+    advance(multiSelection.join(', '), multiSelection.slice())
   }
 
   function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
   return (
@@ -292,12 +295,6 @@ export default function Onboarding() {
           <i className="ti ti-device-floppy" style={{ fontSize: 14 }} aria-hidden="true" /> Auto-saved
         </div>
       </div>
-
-      {!isSupabaseConfigured && (
-        <div className="ob-banner">
-          Supabase isn't configured — your answers stay in this tab only. Add <code>VITE_SUPABASE_URL</code> + <code>VITE_SUPABASE_ANON_KEY</code> to persist.
-        </div>
-      )}
 
       <div className="ob-steps" role="tablist" aria-label="Onboarding sections">
         {STEPS.map((s, i) => {
@@ -319,7 +316,6 @@ export default function Onboarding() {
             key={i}
             msg={m}
             idx={i}
-            profile={profile}
             multiSelection={multiSelection}
             onChip={handleChip}
             onMultiConfirm={handleMultiConfirm}
@@ -361,7 +357,7 @@ export default function Onboarding() {
   )
 }
 
-function Message({ msg, idx, profile, multiSelection, onChip, onMultiConfirm, onCta }) {
+function Message({ msg, idx, multiSelection, onChip, onMultiConfirm, onCta }) {
   if (msg.role === 'user') {
     return (
       <div className="ob-msg user">
@@ -382,12 +378,7 @@ function Message({ msg, idx, profile, multiSelection, onChip, onMultiConfirm, on
             {msg.chips.map((c) => {
               const selected = msg.multi ? multiSelection.includes(c) : false
               return (
-                <button
-                  key={c}
-                  className={`ob-chip ${selected ? 'selected' : ''}`}
-                  onClick={() => onChip(idx, c)}
-                  disabled={msg.locked}
-                >
+                <button key={c} className={`ob-chip ${selected ? 'selected' : ''}`} onClick={() => onChip(idx, c)} disabled={msg.locked}>
                   {c}
                 </button>
               )
@@ -446,10 +437,6 @@ function Snapshot({ profile }) {
             <span className="ob-insight-val">{v}</span>
           </div>
         ))}
-        <div className="ob-insight-row">
-          <span className="ob-insight-key">Potential matches</span>
-          <span className="ob-insight-val calc">Calculating…</span>
-        </div>
       </div>
     </div>
   )

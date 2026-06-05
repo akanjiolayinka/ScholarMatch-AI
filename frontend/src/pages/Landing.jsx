@@ -101,24 +101,26 @@ export default function Landing() {
       <section className="sm-hero">
         <div className="sm-hero-blob-1" />
         <div className="sm-hero-blob-2" />
-        <div className="sm-badge">
-          <i className="ti ti-sparkles" style={{ fontSize: 13 }} aria-hidden="true" />
-          AI-powered scholarship matching
+        <div className="sm-hero-inner">
+          <div className="sm-badge">
+            <i className="ti ti-sparkles" style={{ fontSize: 13 }} aria-hidden="true" />
+            AI-powered scholarship matching
+          </div>
+          <h1 className="sm-h1">Find scholarships that <span>actually fit you</span></h1>
+          <RotatingText className="sm-rotating" lines={ROTATING_LINES} interval={3000} />
+          <p className="sm-sub">
+            Tell us about yourself once. Our AI matches you to scholarships you qualify for —
+            then helps you write the CV, personal statement, and cover letter to win them.
+          </p>
+          <div className="sm-cta-row">
+            <button className="sm-btn-primary" onClick={goAuth}>
+              Start my profile — it's free
+              <i className="ti ti-arrow-right" style={{ fontSize: 15 }} aria-hidden="true" />
+            </button>
+            <button className="sm-btn-secondary" onClick={() => scrollTo('how-it-works')}>See how it works</button>
+          </div>
+          <div className="sm-cta-note">No credit card. Takes 5 minutes.</div>
         </div>
-        <h1 className="sm-h1">Find scholarships that <span>actually fit you</span></h1>
-        <RotatingText className="sm-rotating" lines={ROTATING_LINES} interval={3000} />
-        <p className="sm-sub">
-          Tell us about yourself once. Our AI matches you to scholarships you qualify for —
-          then helps you write the CV, personal statement, and cover letter to win them.
-        </p>
-        <div className="sm-cta-row">
-          <button className="sm-btn-primary" onClick={goAuth}>
-            Start my profile — it's free
-            <i className="ti ti-arrow-right" style={{ fontSize: 15 }} aria-hidden="true" />
-          </button>
-          <button className="sm-btn-secondary" onClick={() => scrollTo('how-it-works')}>See how it works</button>
-        </div>
-        <div className="sm-cta-note">No credit card. Takes 5 minutes.</div>
       </section>
 
       <div className="sm-stats">
@@ -175,6 +177,39 @@ export default function Landing() {
         </div>
       </section>
 
+      <section className="sm-bg-features">
+        <div className="sm-bg-inner">
+          <div className="sm-section-title sm-bg-title">How ScholarMatch works for you — even when you're offline</div>
+          <div className="sm-section-sub sm-bg-sub">Four things running in the background so you never miss an opportunity.</div>
+          <div className="sm-bg-grid">
+            <div className="sm-bg-card">
+              <div className="sm-bg-icon" style={{ background: 'rgba(226,75,74,0.16)', color: '#FCA5A5' }}><span style={{ fontSize: 22 }}>🔔</span></div>
+              <div className="sm-bg-card-title">Deadline reminders</div>
+              <p className="sm-bg-card-desc">Set a reminder on any scholarship with one tap. We'll email you 14 days, 7 days, and 1 day before it closes. The bell turns gold when active. You'll never miss a close date again.</p>
+              <div className="sm-bg-tag">Built into the tracker</div>
+            </div>
+            <div className="sm-bg-card">
+              <div className="sm-bg-icon" style={{ background: 'rgba(29,158,117,0.16)', color: '#6FE9C5' }}><span style={{ fontSize: 22 }}>✨</span></div>
+              <div className="sm-bg-card-title">Silent re-matching</div>
+              <p className="sm-bg-card-desc">Every night, Scholar re-scans our entire database against your saved profile. New scholarships that match you appear automatically the next time you log in — no action needed.</p>
+              <div className="sm-bg-tag">Runs automatically</div>
+            </div>
+            <div className="sm-bg-card">
+              <div className="sm-bg-icon" style={{ background: 'rgba(59,130,246,0.16)', color: '#93C5FD' }}><span style={{ fontSize: 22 }}>📡</span></div>
+              <div className="sm-bg-card-title">Live scholarship feed</div>
+              <p className="sm-bg-card-desc">Our database updates continuously. When a new scholarship is added that matches your profile, it silently drops into your tracker with a "New" badge. New opportunities find you — not the other way around.</p>
+              <div className="sm-bg-tag">Always updating</div>
+            </div>
+            <div className="sm-bg-card">
+              <div className="sm-bg-icon" style={{ background: 'rgba(127,119,221,0.18)', color: '#C9C4FF' }}><span style={{ fontSize: 22 }}>📁</span></div>
+              <div className="sm-bg-card-title">Document vault</div>
+              <p className="sm-bg-card-desc">Upload your transcript, WAEC results, passport, and recommendation letters once. Scholar references them automatically when drafting any application. One upload — used forever.</p>
+              <div className="sm-bg-tag">Inside the Apply tab</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="sm-how" id="how-it-works">
         <div className="sm-section-title">Three steps from sign-up to application-ready</div>
         <div className="sm-section-sub">Most students are fully matched within 10 minutes of signing up.</div>
@@ -209,7 +244,7 @@ export default function Landing() {
         <p className="sm-about-body">
           ScholarMatch AI was built because too many talented African students miss out on
           life-changing scholarships — not because they don't qualify, but because they never
-          find them. We built Scholar to change that.
+          find them. We built ScholarMatch AI to change that.
         </p>
         <div className="sm-about-stats">
           {ABOUT_STATS.map((s) => (
@@ -220,7 +255,7 @@ export default function Landing() {
             </div>
           ))}
         </div>
-        <div className="sm-about-team"><strong>Built by students, for students.</strong> Lagos, Nigeria. 🇳🇬</div>
+        <div className="sm-about-team"><strong>Built by students, for students.</strong> 🇳🇬</div>
       </section>
 
       <section className="sm-final-cta">
@@ -243,6 +278,7 @@ export default function Landing() {
           <div className="sm-footer-brand">
             <Logo size={28} textSize={16} />
             <p>Find scholarships that actually fit you.<br />Built for African students. 🇳🇬</p>
+
           </div>
           <div className="sm-footer-col">
             <h4>Product</h4>
@@ -273,7 +309,7 @@ export default function Landing() {
         </div>
         <div className="sm-footer-bottom">
           <span>© 2025 ScholarMatch AI. All rights reserved.</span>
-          <span>Made with ❤️ in Lagos</span>
+          <span>Made with ❤️ for African students</span>
         </div>
       </footer>
     </div>

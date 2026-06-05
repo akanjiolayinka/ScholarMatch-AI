@@ -42,7 +42,7 @@ export function formatDeadline(deadlineISO) {
   const month = d.toLocaleString('en-US', { month: 'short' })
   const date = d.getDate()
   const year = d.getFullYear()
-  if (days < 0) return 'Deadline passed'
-  if (days <= 60) return `${month} ${date} · ${days} day${days === 1 ? '' : 's'} left`
+  if (days < 0) return `${month} ${date}, ${year} — closed`
+  if (days <= 60) return `${month} ${date}, ${year} · ${days} day${days === 1 ? '' : 's'} left`
   return `${month} ${date}, ${year}`
 }
