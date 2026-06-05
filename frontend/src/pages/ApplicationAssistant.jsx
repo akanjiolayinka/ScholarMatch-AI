@@ -15,10 +15,7 @@ import { useSession } from '../lib/useSession'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { isMockMode, hasMockSession } from '../lib/mockAuth'
-import { buildMockPS, buildMockCV, buildMockCover, MOCK_PROFILE } from '../lib/mockData'
-import { getMockProfile } from '../lib/mockAuth'
-import ScholarshipPanel from '../components/ScholarshipPanel'
-import RefreshButton from '../components/RefreshButton'
+import { buildMockPS, buildMockCV, buildMockCover } from '../lib/mockData'
 import './ApplicationAssistant.css'
 
 // Map the editor tab key to the backend `type` param. The server persists
@@ -60,7 +57,6 @@ export default function ApplicationAssistant() {
     cover_letter: buildMockCover(scholarship),
   } : {})
   const [generating, setGenerating] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(null) // null | 'overview' | 'why'
   const cancelStreamRef = useRef(null)
   const chatRef = useRef(null)
   const inputRef = useRef(null)

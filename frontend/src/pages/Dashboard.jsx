@@ -11,12 +11,8 @@ import {
 import { useSession } from '../lib/useSession'
 import { saveApplication, deleteApplication } from '../lib/applicationsApi'
 import { useToast } from '../components/Toast'
-import { isMockMode, hasMockSession, getMockProfile } from '../lib/mockAuth'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
 import { SkeletonCard, useFirstMountLoading } from '../components/Skeleton'
-import ScholarshipPanel from '../components/ScholarshipPanel'
-import RefreshButton from '../components/RefreshButton'
-import PullToRefresh from '../components/PullToRefresh'
-import { MOCK_PROFILE } from '../lib/mockData'
 import './Dashboard.css'
 
 const CATEGORIES = [
@@ -41,10 +37,6 @@ export default function Dashboard() {
   const toast = useToast()
   const useMock = isMockMode() || hasMockSession()
   const loading = useFirstMountLoading(1500)
-  const storedProfile = getMockProfile() || MOCK_PROFILE
-  const firstName = (storedProfile.name || user?.user_metadata?.full_name || '').split(/\s+/)[0]
-  const [panelFor, setPanelFor] = useState(null) // { scholarship, scrollTo? }
-  const [refreshKey, setRefreshKey] = useState(0)
   const [category, setCategory] = useState('all')
   const [deadlineFilter, setDeadlineFilter] = useState(null)
   const [destinations, setDestinations] = useState(['UK', 'Germany'])
@@ -259,7 +251,6 @@ export default function Dashboard() {
                     saved={saved.has(s.id)}
                     onSave={() => toggleSaved(s)}
                     onApply={() => applyTo(s)}
-                    onWhy={() => setPanelFor({ scholarship: s, scrollTo: 'why' })}
                   />
                 ))}
               </div>
@@ -267,6 +258,10 @@ export default function Dashboard() {
           )}
 
           {loading ? (
+            <div className="db-cards">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : filtered.length > 0 ? (
             <div className="db-cards">
               {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
@@ -279,7 +274,6 @@ export default function Dashboard() {
                   saved={saved.has(s.id)}
                   onSave={() => toggleSaved(s)}
                   onApply={() => applyTo(s)}
-                  onWhy={() => setPanelFor({ scholarship: s, scrollTo: 'why' })}
                 />
               ))}
             </div>

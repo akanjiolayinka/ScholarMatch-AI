@@ -5,9 +5,8 @@ import { useSession } from '../lib/useSession'
 import { fetchProfile, upsertProfile, setUserName } from '../lib/profileApi'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useToast } from '../components/Toast'
-import { isMockMode, hasMockSession, getMockProfile, setMockProfile, MOCK_KEYS } from '../lib/mockAuth'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
 import { MOCK_PROFILE } from '../lib/mockData'
-import RefreshButton from '../components/RefreshButton'
 import './Profile.css'
 
 const GOALS = ['Fund undergrad', 'Postgrad abroad', 'PhD', 'All']
@@ -17,25 +16,10 @@ const DESTINATIONS = ['UK', 'USA', 'Germany', 'Canada', 'Netherlands', 'France',
 // even in mock mode.
 function loadStoredNotifs() {
   if (typeof window === 'undefined') return {}
-  try { return JSON.parse(window.localStorage.getItem(MOCK_KEYS.notifs) || '{}') } catch { return {} }
+  try { return JSON.parse(window.localStorage.getItem('scholarmatch_notifs') || '{}') } catch { return {} }
 }
 
-// On first render, prefer the user's onboarding answers if they exist.
-function buildInitial() {
-  const stored = getMockProfile()
-  if (stored && Object.keys(stored).length) {
-    return {
-      ...MOCK_PROFILE,
-      ...stored,
-      gpaScale: stored.gpaScale ? String(stored.gpaScale) : '5',
-      dob: stored.dob || '',
-      ...loadStoredNotifs(),
-    }
-  }
-  return { ...MOCK_PROFILE, gpaScale: '5', dob: '', ...loadStoredNotifs() }
-}
-
-const INITIAL = buildInitial()
+const INITIAL = { ...MOCK_PROFILE, dob: '', ...loadStoredNotifs() }
 
 const REQUIRED = ['name', 'university', 'degree', 'gpa', 'field', 'nationality', 'goal', 'extras']
 
@@ -146,7 +130,8 @@ export default function Profile() {
       await upsertProfile(user.id, row)
       if (profile.name) await setUserName(user.id, profile.name)
     } else {
-      setMockProfile(profile)
+      // Persist the form locally so reloads in demo mode keep edits.
+      try { window.localStorage.setItem('scholarmatch_profile', JSON.stringify(profile)) } catch {}
       await new Promise((r) => setTimeout(r, 400))
     }
     setSaving(false)
@@ -168,7 +153,7 @@ export default function Profile() {
       if (error) console.warn('saveNotifs:', error.message)
     }
     try {
-      window.localStorage.setItem(MOCK_KEYS.notifs, JSON.stringify({
+      window.localStorage.setItem('scholarmatch_notifs', JSON.stringify({
         newMatches: profile.newMatches,
         deadlines: profile.deadlines,
         weeklyDigest: profile.weeklyDigest,
@@ -193,9 +178,6 @@ export default function Profile() {
           <div className="pf-sub">{profile.university} · {profile.degree} · Joined June 2026</div>
         </div>
         <div className="pf-completion">
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <RefreshButton onRefresh={() => toastApi.push('Profile refreshed', 'success')} />
-          </div>
           <div className="pf-completion-label"><span>Profile {completion}% complete</span></div>
           <div className="pf-comp-bar"><div className="pf-comp-fill" style={{ width: `${completion}%` }} /></div>
           {completion < 100 && (

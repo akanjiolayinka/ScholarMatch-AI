@@ -1,36 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
-import { isMockMode, hasMockSession, getMockUser, clearMockSession } from './mockAuth'
+import { isMockMode, hasMockSession, getMockSession, setMockSession } from './mockAuth'
 
-function mockShape() {
-  const user = getMockUser()
-  if (!user) return null
-  // Mimic Supabase's user shape so consumers can read user_metadata.full_name.
-  return {
-    user: {
-      ...user,
-      user_metadata: { full_name: user.name, ...(user.user_metadata || {}) },
-    },
-    access_token: 'mock',
-  }
-}
-
-// Reads the current session. In mock mode it always reads from localStorage,
-// so signup / login / signout reflect instantly without a network round-trip.
+// Returns { session, user, loading }. In mock mode (no Supabase env, placeholder
+// URL, or the demo-session flag in localStorage) it returns a fixed demo user
+// without ever hitting the network.
 export function useSession() {
-  const [session, setSession] = useState(() => hasMockSession() ? mockShape() : null)
+  const [session, setSession] = useState(() => (isMockMode() || hasMockSession()) ? getMockSession() : null)
   const [loading, setLoading] = useState(() => !(isMockMode() || hasMockSession()))
-
-  useEffect(() => {
-    // Respond to localStorage changes from other tabs (or our own writes via
-    // the storage event).
-    function onStorage() {
-      if (hasMockSession()) setSession(mockShape())
-      else setSession(null)
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
 
   useEffect(() => {
     if (isMockMode() || hasMockSession()) return
@@ -60,7 +37,8 @@ export function useSession() {
 }
 
 export async function signOut() {
-  clearMockSession()
+  setMockSession(false)
   if (isSupabaseConfigured && !isMockMode()) await supabase.auth.signOut()
+  // Force a reload so every stale session-aware component resets.
   if (typeof window !== 'undefined') window.location.assign('/')
 }

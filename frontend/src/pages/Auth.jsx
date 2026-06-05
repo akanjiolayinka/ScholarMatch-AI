@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useSession } from '../lib/useSession'
-import {
-  isMockMode,
-  signUpMock,
-  logInMock,
-  getMockUser,
-  isOnboardingComplete,
-} from '../lib/mockAuth'
+import { setMockSession } from '../lib/mockAuth'
 import { useToast } from '../components/Toast'
 import Logo from '../components/Logo'
 import './Auth.css'
@@ -16,14 +11,20 @@ export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
   const { session, loading: sessionLoading } = useSession()
-  const redirectTo = location.state?.from || (isOnboardingComplete() ? '/dashboard' : '/onboarding')
-  const toast = useToast()
+  const redirectTo = location.state?.from || '/dashboard'
 
   useEffect(() => {
     if (!sessionLoading && session) navigate(redirectTo, { replace: true })
   }, [sessionLoading, session, navigate, redirectTo])
 
-  const [mode, setMode] = useState('signup')
+  const toast = useToast()
+  const [mode, setMode] = useState('signup') // 'signup' | 'login'
+
+  function continueAsDemo() {
+    setMockSession(true)
+    toast.push('Welcome, Temi! Loading your demo profile…', 'success')
+    navigate('/onboarding', { replace: true })
+  }
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -51,6 +52,30 @@ export default function Auth() {
     if (err) { setError(err); return }
     setError('')
     setLoading(true)
+    try {
+      if (isSignup) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name.trim() },
+            emailRedirectTo: `${window.location.origin}/onboarding`,
+          },
+        })
+        if (error) throw error
+        if (data.session) navigate('/onboarding')
+        else setInfo("Check your email to confirm your account, then come back to log in.")
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+        navigate(redirectTo)
+      }
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
     if (isSignup) {
       // Mock signup: store user + start session, then send to onboarding.
@@ -115,6 +140,25 @@ export default function Auth() {
           <div className="au-sub">{isSignup ? 'Start finding scholarships in 5 minutes' : 'Your matches are waiting'}</div>
 
           {error && <div className="au-alert" role="alert">{error}</div>}
+          {info && <div className="au-alert success" role="status">{info}</div>}
+
+          <button type="button" className="au-demo" onClick={continueAsDemo}>
+            <i className="ti ti-sparkles" style={{ fontSize: 14 }} aria-hidden="true" />
+            Continue as demo user — no sign-up needed
+          </button>
+          <div className="au-demo-sub">Explore every feature with a pre-built profile.</div>
+
+          <button type="button" className="au-google" onClick={handleGoogle}>
+            <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.87-3.04.87-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 009 18z"/>
+              <path fill="#FBBC05" d="M3.97 10.73a5.4 5.4 0 010-3.46V4.93H.96a9 9 0 000 8.14l3.01-2.34z"/>
+              <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.34l2.58-2.58A9 9 0 009 0a9 9 0 00-8.04 4.93l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          <div className="au-divider"><span>or</span></div>
 
           <form onSubmit={handleSubmit} noValidate>
             {isSignup && (

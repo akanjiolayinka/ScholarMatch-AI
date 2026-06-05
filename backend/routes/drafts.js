@@ -5,15 +5,7 @@ import { requireAuth } from '../middleware/auth.js'
 const router = Router()
 const MODEL = 'llama-3.3-70b-versatile'
 
-// Construct the Groq client lazily so a missing key doesn't crash boot —
-// callers see a 503 from the route instead.
-let groq = null
-function getGroq() {
-  if (groq) return groq
-  if (!process.env.GROQ_API_KEY) return null
-  groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
-  return groq
-}
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
 const SYSTEM_PROMPT = `You are Scholar, the writing AI inside ScholarMatch — an app
 that helps African students win international scholarships. You draft personal
@@ -98,9 +90,8 @@ router.post('/generate', requireAuth, async (req, res) => {
   if (!type || (type !== 'refine' && !scholarshipId)) {
     return res.status(400).json({ error: 'Missing type or scholarshipId' })
   }
-  const client = getGroq()
-  if (!client) {
-    return res.status(503).json({ error: 'GROQ_API_KEY not configured' })
+  if (!process.env.GROQ_API_KEY) {
+    return res.status(500).json({ error: 'GROQ_API_KEY not configured' })
   }
 
   // Fetch context up-front so any error fails before we open the SSE channel.
@@ -126,7 +117,7 @@ router.post('/generate', requireAuth, async (req, res) => {
 
   let fullText = ''
   try {
-    const stream = await client.chat.completions.create({
+    const stream = await groq.chat.completions.create({
       model: MODEL,
       messages,
       temperature: type === 'refine' ? 0.5 : 0.7,

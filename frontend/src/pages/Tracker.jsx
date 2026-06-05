@@ -13,8 +13,6 @@ import {
 import { useToast } from '../components/Toast'
 import { isMockMode, hasMockSession } from '../lib/mockAuth'
 import { MOCK_SCHOLARSHIPS, statusToCol } from '../lib/mockData'
-import RefreshButton from '../components/RefreshButton'
-import PullToRefresh from '../components/PullToRefresh'
 import './Tracker.css'
 
 const COLUMNS = [
@@ -205,8 +203,7 @@ export default function Tracker() {
           <div className="tr-sub">Track every scholarship from saved to result</div>
         </div>
         <div className="tr-header-right">
-          <RefreshButton onRefresh={() => toast.push(`Refreshed — ${cards.length} applications updated`, 'success')} />
-          <button className="tr-btn-outline" onClick={() => toast.push('Filters coming soon', 'info')}><i className="ti ti-filter" style={{ fontSize: 13 }} aria-hidden="true" /> Filter</button>
+          <button className="tr-btn-outline"><i className="ti ti-filter" style={{ fontSize: 13 }} aria-hidden="true" /> Filter</button>
           <button className="tr-btn-primary" onClick={() => setAddOpen(true)}>
             <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" /> Add scholarship
           </button>

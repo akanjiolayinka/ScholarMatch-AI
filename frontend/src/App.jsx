@@ -11,8 +11,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { useSession } from './lib/useSession'
 import { syncUser } from './lib/api'
 
-function Protected({ children, requireOnboarding = true }) {
-  return <ProtectedRoute requireOnboarding={requireOnboarding}>{children}</ProtectedRoute>
+function Protected({ children }) {
+  return <ProtectedRoute>{children}</ProtectedRoute>
 }
 
 export default function App() {
@@ -32,7 +32,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/auth" element={<Auth />} />
-      <Route path="/onboarding" element={<Protected requireOnboarding={false}><Onboarding /></Protected>} />
+      <Route path="/onboarding" element={<Protected><Onboarding /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/apply/:id" element={<Protected><ApplicationAssistant /></Protected>} />
       <Route path="/tracker" element={<Protected><Tracker /></Protected>} />

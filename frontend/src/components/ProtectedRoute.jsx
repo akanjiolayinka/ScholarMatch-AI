@@ -1,28 +1,18 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useSession } from '../lib/useSession'
 import { isSupabaseConfigured } from '../lib/supabase'
-import { isMockMode, hasMockSession, isOnboardingComplete } from '../lib/mockAuth'
+import { isMockMode, hasMockSession } from '../lib/mockAuth'
 
-// Gates a route on:
-//   1. having a session
-//   2. (optionally) having completed onboarding
-// In mock mode the session comes from localStorage; in production it comes
-// from Supabase. The onboarding gate is keyed off `sm_onboarding_complete`.
-export default function ProtectedRoute({ children, requireOnboarding = true }) {
+// In mock mode (no Supabase configured, or the user clicked "Continue as
+// demo"), let everything through unguarded. Otherwise gate on a session.
+export default function ProtectedRoute({ children }) {
   const { session, loading } = useSession()
   const location = useLocation()
 
-  const mock = isMockMode() || hasMockSession()
+  if (isMockMode() || hasMockSession()) return children
+  if (!isSupabaseConfigured) return children
 
-  // Determine sign-in state for redirect logic.
-  const signedIn = mock ? hasMockSession() : !!session
-
-  if (!mock && !isSupabaseConfigured) {
-    // No backend configured — show landing/auth-only without redirect loops.
-    return children
-  }
-
-  if (!mock && loading) {
+  if (loading) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -38,13 +28,8 @@ export default function ProtectedRoute({ children, requireOnboarding = true }) {
     )
   }
 
-  if (!signedIn) {
+  if (!session) {
     return <Navigate to="/auth" replace state={{ from: location.pathname }} />
-  }
-
-  // Onboarding gate: anything but /onboarding itself requires the flag.
-  if (requireOnboarding && !isOnboardingComplete()) {
-    return <Navigate to="/onboarding" replace />
   }
 
   return children

@@ -42,6 +42,7 @@ export async function patch(path, body) {
 
 // Sync the Supabase user into our `users` table. Safe to call on every login.
 export async function syncUser() {
+  if (!API_URL) return { skipped: true }
   try {
     return await post('/api/auth/sync', {})
   } catch (err) {
