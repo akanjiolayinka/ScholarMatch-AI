@@ -99,8 +99,16 @@ export default function Dashboard() {
     return list
   }, [category, deadlineFilter, destinations, search, sort])
 
-  const freshOnes = SCHOLARSHIPS.filter((s) => s.fresh)
-  const urgent = filtered.filter((s) => deadlineTier(daysUntil(s.deadline)) === 'urgent')
+  // Up to 3 truly-fresh items, scoped to the filtered list so the row never
+  // duplicates a card that already appears below.
+  const freshIds = new Set(SCHOLARSHIPS.filter((s) => s.fresh || s.is_new).slice(0, 3).map((s) => s.id))
+  const freshOnes = filtered.filter((s) => freshIds.has(s.id)).slice(0, 3)
+  const freshIdSet = new Set(freshOnes.map((s) => s.id))
+  const mainGrid = filtered.filter((s) => !freshIdSet.has(s.id))
+  const urgent = filtered.filter((s) => {
+    const d = daysUntil(s.deadline)
+    return d >= 0 && d <= 30
+  })
   const soonest = urgent[0]
 
   function clearFilters() {
@@ -110,7 +118,13 @@ export default function Dashboard() {
     setSearch('')
   }
 
+  function doRefresh() {
+    setRefreshKey((k) => k + 1)
+    toast.push(`Refreshed — ${SCHOLARSHIPS.length} matches updated`, 'success')
+  }
+
   return (
+    <PullToRefresh onRefresh={doRefresh}>
     <div className="db-root">
       <AppNav initials="TA" />
 
@@ -183,10 +197,13 @@ export default function Dashboard() {
 
           <div className="db-header">
             <div>
-              <div className="db-title">Your matches <span className="db-title-count">{filtered.length}</span></div>
+              <div className="db-title">
+                {firstName ? `Welcome back, ${firstName}` : 'Your matches'} <span className="db-title-count">{filtered.length}</span>
+              </div>
               <div className="db-subtitle">Ranked by how well they fit you — updated automatically</div>
             </div>
             <div className="db-header-right">
+              <RefreshButton onRefresh={() => { setRefreshKey((k) => k + 1); toast.push(`Refreshed — ${SCHOLARSHIPS.length} matches updated`, 'success') }} />
               <label className="db-search">
                 <i className="ti ti-search" style={{ fontSize: 14, color: 'var(--color-text-tertiary)' }} aria-hidden="true" />
                 <input
@@ -222,7 +239,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {freshOnes.length > 0 && (
+          {freshOnes.length > 0 && !loading && (
             <div className="db-fresh-section">
               <div className="db-fresh-label">Fresh for you — <span>{freshOnes.length} new since your last visit</span></div>
               <div className="db-cards">
@@ -246,7 +263,11 @@ export default function Dashboard() {
             </div>
           ) : filtered.length > 0 ? (
             <div className="db-cards">
-              {filtered.map((s) => (
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : mainGrid.length > 0 ? (
+            <div className="db-cards">
+              {mainGrid.map((s) => (
                 <Card
                   key={s.id}
                   s={s}
@@ -266,11 +287,23 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {panelFor && (
+        <ScholarshipPanel
+          scholarship={panelFor.scholarship}
+          scrollToSection={panelFor.scrollTo}
+          profile={storedProfile}
+          onClose={() => setPanelFor(null)}
+          onApply={() => { applyTo(panelFor.scholarship); setPanelFor(null) }}
+          onAddToTracker={() => { toggleSaved(panelFor.scholarship); setPanelFor(null) }}
+        />
+      )}
     </div>
+    </PullToRefresh>
   )
 }
 
-function Card({ s, saved, onSave, onApply, fresh = false }) {
+function Card({ s, saved, onSave, onApply, onWhy, fresh = false }) {
   const days = daysUntil(s.deadline)
   const dlTier = deadlineTier(days)
   return (
@@ -303,6 +336,9 @@ function Card({ s, saved, onSave, onApply, fresh = false }) {
             aria-label={saved ? 'Remove from saved' : 'Save for later'}
           >
             <i className={`ti ${saved ? 'ti-bookmark-filled' : 'ti-bookmark'}`} style={{ fontSize: 12 }} aria-hidden="true" />
+          </button>
+          <button className="db-why-btn" onClick={(e) => { e.stopPropagation(); onWhy?.() }} aria-label="Why am I a fit?">
+            <i className="ti ti-sparkles" style={{ fontSize: 11 }} aria-hidden="true" /> Why fit?
           </button>
           <button className="db-apply-btn" onClick={(e) => { e.stopPropagation(); onApply() }}>
             Apply <i className="ti ti-arrow-right" style={{ fontSize: 11 }} aria-hidden="true" />

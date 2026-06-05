@@ -30,43 +30,27 @@ export default function Auth() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
 
   const isSignup = mode === 'signup'
 
   function switchMode(next) {
     setMode(next)
     setError('')
-    setInfo('')
   }
 
-  async function handleGoogle() {
-    setError('')
-    if (!isSupabaseConfigured) {
-      setError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/onboarding` },
-    })
-    if (error) setError(error.message)
+  function validate() {
+    if (isSignup && !name.trim()) return 'Please enter your full name.'
+    if (!email.trim() || !email.includes('@')) return 'Please enter a valid email address.'
+    if (isSignup && password.length < 8) return 'Password must be at least 8 characters.'
+    if (!password) return 'Please enter your password.'
+    return null
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    const err = validate()
+    if (err) { setError(err); return }
     setError('')
-    setInfo('')
-
-    if (!isSupabaseConfigured) {
-      setError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-    if (isSignup && !name.trim()) {
-      setError('Please enter your full name.')
-      return
-    }
-
     setLoading(true)
     try {
       if (isSignup) {
@@ -93,17 +77,29 @@ export default function Auth() {
     }
   }
 
-  async function handleForgot() {
-    if (!email) {
-      setError('Enter your email first, then click Forgot password.')
-      return
+    if (isSignup) {
+      // Mock signup: store user + start session, then send to onboarding.
+      await wait(1000)
+      signUpMock(name.trim(), email.trim())
+      toast.push('Account created. Let\'s build your profile.', 'success')
+      navigate('/onboarding', { replace: true })
+    } else {
+      await wait(800)
+      const existing = getMockUser()
+      if (!existing) {
+        setLoading(false)
+        toast.push('No account found. Sign up first.', 'error')
+        return
+      }
+      const user = logInMock(email.trim())
+      if (!user) {
+        setLoading(false)
+        toast.push('Email doesn\'t match the account on this device.', 'error')
+        return
+      }
+      toast.push(`Welcome back, ${user.name.split(' ')[0]}!`, 'success')
+      navigate(isOnboardingComplete() ? '/dashboard' : '/onboarding', { replace: true })
     }
-    setError('')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
-    })
-    if (error) setError(error.message)
-    else setInfo('Password reset link sent. Check your email.')
   }
 
   return (
@@ -176,24 +172,29 @@ export default function Auth() {
               <input id="au-email" className="au-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="au-field">
-              <div className="au-field-row">
-                <label className="au-label" htmlFor="au-password">Password</label>
-                {!isSignup && (
-                  <button type="button" className="au-forgot" onClick={handleForgot}>Forgot password?</button>
-                )}
-              </div>
-              <input id="au-password" className="au-input" type="password" autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+              <label className="au-label" htmlFor="au-password">Password</label>
+              <input
+                id="au-password"
+                className="au-input"
+                type="password"
+                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={isSignup ? 8 : 1}
+                required
+                placeholder={isSignup ? 'At least 8 characters' : ''}
+              />
             </div>
 
             <button type="submit" className="au-submit" disabled={loading}>
               {loading && <span className="au-spinner" aria-hidden="true" />}
-              {isSignup ? 'Create account' : 'Log in'}
+              {loading ? (isSignup ? 'Creating account…' : 'Logging in…') : (isSignup ? 'Create account' : 'Log in')}
             </button>
           </form>
 
-          {isSignup && (
+          {isMockMode() && (
             <div className="au-legal">
-              By signing up, you agree to our <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>.
+              Demo mode — your account stays on this device. No emails sent.
             </div>
           )}
 
@@ -209,3 +210,5 @@ export default function Auth() {
     </div>
   )
 }
+
+function wait(ms) { return new Promise((r) => setTimeout(r, ms)) }

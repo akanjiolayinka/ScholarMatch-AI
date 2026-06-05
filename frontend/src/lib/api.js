@@ -1,6 +1,9 @@
 import { supabase } from './supabase'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+// Empty string in production (set via frontend/.env.production) so all
+// /api/... calls go to the same origin that served the SPA — no CORS hop.
+const BASE_URL = import.meta.env.VITE_API_URL || ''
+const API_URL = BASE_URL
 
 async function authHeaders() {
   const headers = { 'Content-Type': 'application/json' }

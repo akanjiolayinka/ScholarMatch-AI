@@ -276,9 +276,12 @@ export default function ApplicationAssistant() {
                 </div>
               </div>
             </div>
-            <button className="aa-btn-outline" style={{ fontSize: 11 }}>
-              <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" /> View requirements
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <RefreshButton onRefresh={() => toast.push('Draft refreshed', 'success')} />
+              <button className="aa-btn-outline" style={{ fontSize: 11 }} onClick={() => setPanelOpen('overview')}>
+                <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" /> View requirements
+              </button>
+            </div>
           </div>
 
           <div className="aa-doc-tabs" role="tablist">
@@ -439,6 +442,17 @@ export default function ApplicationAssistant() {
           </div>
         </aside>
       </div>
+
+      {panelOpen && (
+        <ScholarshipPanel
+          scholarship={scholarship}
+          profile={getMockProfile() || MOCK_PROFILE}
+          scrollToSection={panelOpen === 'why' ? 'why' : undefined}
+          onClose={() => setPanelOpen(null)}
+          onApply={() => setPanelOpen(null)}
+          onAddToTracker={() => { toast.push('Added to tracker', 'success'); setPanelOpen(null) }}
+        />
+      )}
     </div>
   )
 }

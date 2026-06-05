@@ -1,0 +1,5 @@
+.rf-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--color-text-secondary); transition: background 0.15s, color 0.15s, transform 0.15s; }
+.rf-btn:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+.rf-btn:active { transform: scale(0.94); }
+.rf-btn.spin i { animation: rfSpin 0.8s linear infinite; display: inline-block; color: #F5A623; }
+@keyframes rfSpin { to { transform: rotate(360deg); } }

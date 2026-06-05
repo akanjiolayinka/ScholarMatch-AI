@@ -1,13 +1,18 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import authRoutes from './routes/auth.js'
 import matchingRoutes from './routes/matching.js'
 import draftsRoutes from './routes/drafts.js'
 
 const app = express()
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }))
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+}))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (_req, res) => res.json({ ok: true }))
@@ -20,3 +25,4 @@ const port = process.env.PORT || 3001
 app.listen(port, () => {
   console.log(`ScholarMatch API listening on :${port}`)
 })
+

@@ -193,6 +193,7 @@ export default function Tracker() {
   }
 
   return (
+    <PullToRefresh onRefresh={() => toast.push(`Refreshed — ${cards.length} applications updated`, 'success')}>
     <div className="tr-root">
       <AppNav initials="TA" />
 
@@ -286,6 +287,7 @@ export default function Tracker() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   )
 }
 

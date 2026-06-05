@@ -118,7 +118,6 @@ export default function Landing() {
           </button>
           <button className="sm-btn-secondary" onClick={() => scrollTo('how-it-works')}>See how it works</button>
         </div>
-        <div className="sm-cta-note">No credit card. Takes 5 minutes.</div>
       </section>
 
       <div className="sm-stats">

@@ -1,0 +1,49 @@
+.sp-backdrop { position: fixed; inset: 0; background: rgba(10,14,42,0.45); backdrop-filter: blur(3px); z-index: 200; display: flex; justify-content: flex-end; animation: spFade 0.18s ease; }
+@keyframes spFade { from { opacity: 0; } to { opacity: 1; } }
+.sp-panel { width: min(520px, 100vw); background: var(--color-background-primary); display: flex; flex-direction: column; overflow-y: auto; animation: spIn 0.25s ease; box-shadow: -16px 0 48px rgba(10,14,42,0.18); }
+@keyframes spIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.sp-head { padding: 22px 24px 18px; background: linear-gradient(180deg, #FAEEDA 0%, transparent 100%); position: relative; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.sp-close { position: absolute; top: 14px; right: 14px; background: rgba(255,255,255,0.85); border: 0.5px solid var(--color-border-tertiary); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sp-close:hover { background: #fff; }
+.sp-org { font-size: 11px; font-weight: 600; color: #854F0B; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.sp-name { font-family: 'Sora', sans-serif; font-size: 22px; font-weight: 700; color: #0A0E2A; line-height: 1.25; }
+.sp-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--color-text-secondary); }
+.sp-match { background: #0A0E2A; color: #F5A623; padding: 3px 10px; border-radius: 20px; font-weight: 600; font-size: 11px; }
+.sp-amount, .sp-funding { color: var(--color-text-primary); font-weight: 500; }
+.sp-sep { color: var(--color-text-tertiary); }
+
+.sp-section { padding: 18px 24px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.sp-section:last-of-type { border-bottom: none; }
+.sp-section-title { font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 600; color: #0A0E2A; margin-bottom: 10px; display: flex; align-items: center; }
+.sp-body { font-size: 14px; color: var(--color-text-secondary); line-height: 1.65; }
+.sp-list { display: flex; flex-direction: column; gap: 8px; font-size: 13px; list-style: none; padding: 0; margin: 0; color: var(--color-text-primary); }
+.sp-list li { line-height: 1.5; }
+.sp-list a { color: #185FA5; text-decoration: underline; }
+.sp-list strong { color: #0A0E2A; font-weight: 600; margin-right: 4px; }
+
+.sp-why { background: linear-gradient(180deg, rgba(245,166,35,0.08), transparent 80%); }
+.sp-why-intro { margin-bottom: 12px; }
+.sp-fit-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.sp-fit-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 10px; }
+.sp-fit-list li.ok { background: #E1F5EE; color: #085041; }
+.sp-fit-list li.warn { background: #FAEEDA; color: #633806; }
+.sp-mark { font-weight: 700; flex-shrink: 0; }
+
+.sp-checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--color-text-primary); }
+.sp-checklist li { display: flex; align-items: center; gap: 10px; }
+.sp-box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--color-border-secondary); flex-shrink: 0; }
+
+.sp-footer { padding: 14px 24px 24px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; position: sticky; bottom: 0; background: var(--color-background-primary); border-top: 0.5px solid var(--color-border-tertiary); }
+.sp-btn { padding: 10px 16px; border-radius: var(--border-radius-md); font-family: inherit; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
+.sp-btn:active { transform: scale(0.97); }
+.sp-btn-outline { background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-secondary); }
+.sp-btn-outline:hover { background: var(--color-background-secondary); }
+.sp-btn-primary { background: #0A0E2A; color: #fff; border: none; font-weight: 500; }
+.sp-btn-primary:hover { box-shadow: 0 6px 16px rgba(10,14,42,0.18); }
+
+@media (max-width: 640px) {
+  .sp-panel { width: 100vw; }
+  .sp-section { padding: 16px 18px; }
+  .sp-head { padding: 18px 18px 14px; }
+}
